@@ -1,0 +1,105 @@
+---
+title: "Anthropic"
+description: "Trace every Claude API call with one function."
+---
+
+## Install
+
+<CodeGroup>
+```bash Python
+pip install trulayer anthropic
+```
+
+```bash TypeScript
+npm install @trulayer/sdk @anthropic-ai/sdk
+```
+</CodeGroup>
+
+## Instrument
+
+<CodeGroup>
+```python Python
+import os
+from anthropic import Anthropic
+import trulayer
+
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project="my-app")
+
+client = Anthropic()
+trulayer.instrument_anthropic(client)
+```
+
+```typescript TypeScript
+import Anthropic from "@anthropic-ai/sdk";
+import { TruLayer, instrumentAnthropic } from "@trulayer/sdk";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "my-app",
+});
+
+const anthropic = instrumentAnthropic(new Anthropic(), tl);
+```
+</CodeGroup>
+
+## What gets captured
+
+Every call to `messages.create` (sync and streaming, async and sync) becomes an `llm` span with:
+
+- `input` — the full `messages` array and `system` prompt
+- `output` — the response content blocks (text + tool_use)
+- `model`
+- `prompt_tokens` → Anthropic's `input_tokens`
+- `completion_tokens` → Anthropic's `output_tokens`
+- `cache_creation_input_tokens`, `cache_read_input_tokens` → attached as metadata when prompt caching is in use
+- `stop_reason` — attached as metadata (`end_turn`, `tool_use`, `max_tokens`)
+- `latency_ms`
+
+## Streaming
+
+```python
+with client.messages.stream(
+    model="claude-sonnet-4-6",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hi"}],
+) as stream:
+    for text in stream.text_stream:
+        print(text, end="")
+# span closes when the `with` block exits with final token counts
+```
+
+## Tool use
+
+Claude's tool calls appear in the span output under `content[].tool_use`. To trace tool **execution** as its own span:
+
+```python
+with trulayer.current_trace().span("tool:get_weather", span_type="tool") as span:
+    span.set_input(tool_input)
+    result = get_weather(**tool_input)
+    span.set_output(result)
+```
+
+Then feed the result back to Claude with a follow-up `messages.create` call — that becomes a second `llm` span, and the two-turn conversation appears as a clear waterfall in the dashboard.
+
+## Prompt caching
+
+Anthropic's [prompt caching](https://docs.claude.com/en/docs/build-with-claude/prompt-caching) works transparently — the SDK records `cache_creation_input_tokens` and `cache_read_input_tokens` as span metadata so you can see cache hit rates in the dashboard's Metrics view.
+
+Filter by `metadata.cache_hit_rate` or query via the API:
+
+```bash
+curl "https://api.trulayer.ai/v1/metrics?project_id=my-app&from=...&filters[model]=claude-sonnet-4-6" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+## Disabling
+
+```python
+trulayer.uninstrument_anthropic(client)
+```
+
+## Known gotchas
+
+- **Extended thinking** — thinking content is captured as part of the span output (`content[].thinking`). It'll show up in trace detail views alongside the visible response.
+- **Batch API (`messages.batches`)** — not auto-instrumented. Wrap batch submissions manually with `trace()` if you want observability.
+- **Vertex and Bedrock** — use the respective Anthropic SDK client (`AnthropicVertex`, `AnthropicBedrock`) and the same `instrument_anthropic()` call.

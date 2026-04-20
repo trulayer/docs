@@ -1,0 +1,67 @@
+---
+title: "Evals"
+description: "Run, view, and compare evaluation results."
+---
+
+The **Evals** page is where you configure evaluators, run them against traces or datasets, and track regression over time.
+
+## Sub-sections
+
+- **Results** — every eval result your app has triggered, newest first.
+- **Datasets** — curated trace collections used as fixed test inputs for regression.
+- **Runs** — dataset × evaluator combinations executed as a batch.
+- **Evaluators** — built-in + custom evaluators you can trigger.
+
+## Results
+
+One row per eval result. Columns: trace ID, evaluator, metric, score, label, latency, timestamp. Click any row for the reasoning (LLM evals) or the rule output.
+
+Filters: evaluator type, metric name, label, time range, project.
+
+## Datasets
+
+A **dataset** is a named set of trace IDs. Create one by:
+
+- Selecting traces from the Traces page and choosing **Add to dataset**
+- Filtering in the Feedback page and pushing highly-rated or highly-disputed traces into a dataset
+- Uploading a JSONL file via the dashboard or `POST /v1/datasets`
+
+Every dataset has a stable ID — reference it from CI to run regression on every PR.
+
+## Runs
+
+Click **Run evaluators** on a dataset to trigger an evaluator over every trace in it. The resulting run is a row under Runs showing:
+
+- Dataset + evaluator + metric
+- Completion status and progress
+- Aggregate score (mean, median, histogram)
+- Pass/fail ratio if the metric is categorical
+
+Runs can be compared pairwise — pick two runs over the same dataset and the dashboard diffs them by trace, highlighting regressions.
+
+## Evaluators
+
+Built-in evaluators (always available):
+
+| Evaluator | Type | Measures |
+| --------- | ---- | -------- |
+| `correctness` | `llm` | Does the output match the ground-truth answer? |
+| `hallucination` | `llm` | Does the output contain claims not grounded in retrieved context? |
+| `relevance` | `llm` | Does the output address what was asked? |
+| `toxicity` | `llm` | Is the output safe and non-toxic? |
+| `json_schema` | `rule` | Does the output match a provided JSON Schema? |
+| `latency_p95` | `rule` | Is trace latency under a threshold? |
+| `has_citation` | `rule` | Does the output include a citation pattern? |
+
+Custom evaluators can be created from the **Evaluators** tab — provide a rubric (LLM) or a Python function (rule).
+
+## Trigger programmatically
+
+```bash
+curl https://api.trulayer.ai/v1/eval \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"trace_id":"01j...","evaluator_type":"llm","metric_name":"correctness"}'
+```
+
+Or configure evaluators to run automatically on every ingested trace matching a filter — see **Evaluators → Triggers**.

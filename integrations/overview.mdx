@@ -1,0 +1,46 @@
+---
+title: "Framework integrations"
+description: "Supported LLM frameworks and SDKs — one function to instrument, zero code changes per call."
+---
+
+TruLayer integrates with the major LLM SDKs and orchestration frameworks via auto-instrumentation. Once instrumented, every call these frameworks make becomes a span in the active trace — no further code changes.
+
+## Tier 1 (supported at V1 Phase 1)
+
+| Framework | Language(s) | Helper |
+| --------- | ----------- | ------ |
+| [OpenAI](/integrations/openai) | Python, TypeScript | `instrument_openai(client)` / `instrumentOpenAI(client)` |
+| [Anthropic](/integrations/anthropic) | Python, TypeScript | `instrument_anthropic(client)` / `instrumentAnthropic(client)` |
+| Vercel AI SDK | TypeScript | `instrumentVercelAI()` |
+| LlamaIndex | Python | `instrument_llamaindex()` |
+| PydanticAI | Python | `instrument_pydantic_ai()` |
+
+## Tier 2 (supported at V1 Phase 2)
+
+| Framework | Language(s) | Helper |
+| --------- | ----------- | ------ |
+| LangChain | Python, TypeScript | `instrument_langchain()` / `instrumentLangChain()` |
+| CrewAI | Python | `instrument_crewai()` |
+| Mastra | TypeScript | `instrumentMastra()` |
+| DSPy | Python | `instrument_dspy()` |
+| Haystack | Python | `instrument_haystack()` |
+| AutoGen | Python | `instrument_autogen()` |
+
+## Not supported? Use manual instrumentation.
+
+If your framework isn't listed, you can still get full tracing — wrap calls with `trace()` and `span()` manually. See [Traces and spans](/concepts/traces-and-spans).
+
+Or open a [feature request](https://github.com/trulayer/trulayer/issues/new) — we prioritise based on demand.
+
+## How auto-instrumentation works
+
+Each helper monkey-patches the framework's client methods to emit a span before each call and record the result after. The patch is:
+
+- **Reversible** — call `uninstrument_*()` / `uninstrumentLangChain()` to restore the original methods
+- **Idempotent** — calling `instrument_*()` twice is a no-op
+- **Thread/async-safe** — spans attach to the active trace via async-local context
+- **Non-blocking** — span emission is buffered; no added latency on the hot path
+
+## Versioning
+
+Integrations target specific major versions of each framework. Incompatible upgrades are called out in the SDK CHANGELOG. Run the SDK's own test suite against your framework version if you're on something exotic.

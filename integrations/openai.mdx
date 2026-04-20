@@ -1,0 +1,115 @@
+---
+title: "OpenAI"
+description: "Trace every OpenAI call with one function."
+---
+
+## Install
+
+<CodeGroup>
+```bash Python
+pip install trulayer openai
+```
+
+```bash TypeScript
+npm install @trulayer/sdk openai
+```
+</CodeGroup>
+
+## Instrument
+
+<CodeGroup>
+```python Python
+import os
+from openai import OpenAI
+import trulayer
+
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project="my-app")
+
+client = OpenAI()
+trulayer.instrument_openai(client)
+```
+
+```typescript TypeScript
+import OpenAI from "openai";
+import { TruLayer, instrumentOpenAI } from "@trulayer/sdk";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "my-app",
+});
+
+const openai = instrumentOpenAI(new OpenAI(), tl);
+```
+</CodeGroup>
+
+## What gets captured
+
+Every call to the following becomes an `llm` span:
+
+- `client.chat.completions.create` (including streaming)
+- `client.completions.create`
+- `client.embeddings.create`
+- `client.responses.create` (if available in your SDK version)
+
+Captured on each span:
+
+- `input` — the full `messages` array (or `prompt`)
+- `output` — the response content
+- `model`
+- `prompt_tokens`, `completion_tokens`
+- `latency_ms`
+- Any errors (with type and message)
+
+## Streaming
+
+Streaming responses are fully supported — the span is held open until the stream closes, at which point the concatenated output and final token counts are recorded.
+
+<CodeGroup>
+```python Python
+stream = client.chat.completions.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": "Hi"}],
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].delta.content or "", end="")
+# span closes here with the full concatenated output
+```
+
+```typescript TypeScript
+const stream = await openai.chat.completions.create({
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: "Hi" }],
+  stream: true,
+});
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0].delta.content ?? "");
+}
+// span closes after the for-await loop exits
+```
+</CodeGroup>
+
+## Tool calling
+
+Tool calls are captured in the span's output as part of the `choices[].message.tool_calls` field. If you want each tool execution to be its own span, wrap your tool invocation:
+
+```python
+with trulayer.current_trace().span("tool:lookup_weather", span_type="tool") as span:
+    span.set_input(tool_args)
+    result = lookup_weather(**tool_args)
+    span.set_output(result)
+```
+
+## Disabling temporarily
+
+```python
+trulayer.uninstrument_openai(client)  # restore originals
+# ... untraced work ...
+trulayer.instrument_openai(client)    # re-enable
+```
+
+## Known gotchas
+
+- **`client` reuse across threads/tasks** — instrumentation patches the instance, not the class; spawning a new `OpenAI()` gives you an uninstrumented client. Instrument each one, or construct and instrument a single shared client.
+- **Custom `base_url`** — works fine; the span records whatever model you request.
+- **Azure OpenAI** — use `AzureOpenAI` and the same `instrument_openai()` call; fields are identical.

@@ -1,0 +1,52 @@
+---
+title: "Metrics"
+description: "Aggregate views over traces — latency, errors, cost, feedback."
+---
+
+The **Metrics** page shows rolling aggregations over the time window selected in the top-right picker. Every chart is interactive — click a point to drill into the underlying traces.
+
+## Charts
+
+### Volume
+Trace count per bucket. First thing to check after a deploy — sudden drops mean the ingest is broken; sudden spikes mean something looped.
+
+### Error rate
+Fraction of traces with `setError()` or uncaught exceptions. Dashed overlay shows the previous period for comparison.
+
+### Latency percentiles
+`p50`, `p95`, `p99` of trace wall-clock duration. Toggle by metric to overlay. Most teams treat `p95` as the SLI.
+
+### Cost
+Sum of `(prompt_tokens + completion_tokens) × model_price` per bucket. Split by model on click to see which model dominates.
+
+### Feedback positive rate
+Fraction of feedback-labeled traces with `label="good"`. Low-signal if feedback volume is low — watch the companion count chart.
+
+### Eval pass rate
+Fraction of `pass` labels over the eval runs in the window. Per-evaluator breakdown via the metric picker.
+
+## Filters
+
+Apply across all charts on the page:
+
+- **Project**
+- **Environment** (`production` / `staging` / your custom labels)
+- **Model**
+- **Metadata key/value** — e.g. `metadata.tier = "pro"` or `metadata.feature = "rag_v2"`
+
+Filters persist in the URL, so you can bookmark a view.
+
+## Drilling down
+
+- Click any point on a chart → jump to Traces filtered by that bucket and current filters
+- Click a model label in the legend → filter all charts to that model
+- Right-click a chart → **Copy embed URL** for sharing with teammates
+
+## Via API
+
+```bash
+curl "https://api.trulayer.ai/v1/metrics?project_id=rag-app&from=2026-04-19T00:00:00Z&to=2026-04-19T23:59:59Z" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+Returns latency percentiles, error rate, total cost, trace count. See [API reference](/api-reference/introduction).

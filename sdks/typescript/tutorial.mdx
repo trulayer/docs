@@ -1,0 +1,250 @@
+---
+title: "TypeScript SDK tutorial"
+description: "Step-by-step: instrument a Node, Edge, or Bun app with @trulayer/sdk."
+---
+
+This tutorial mirrors the [Python tutorial](/sdks/python/tutorial) — same API shape, `camelCase` names, async callbacks instead of context managers.
+
+<Info>
+  Assumes `TRULAYER_API_KEY` and `OPENAI_API_KEY` are exported. Install: `npm install @trulayer/sdk openai anthropic ai`.
+</Info>
+
+## 1. Initialise the SDK
+
+```typescript
+import { TruLayer } from "@trulayer/sdk";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "tutorial",
+  environment: "development",
+});
+```
+
+In long-lived apps (Next.js, Fastify, Hono), create one `TruLayer` instance at module scope and reuse it.
+
+## 2. Trace a block of code
+
+```typescript
+await tl.trace("answer_question", async (trace) => {
+  trace.setInput({ question });
+  const answer = await myAgent(question);
+  trace.setOutput({ answer });
+});
+```
+
+The callback runs with the trace as its argument; when it resolves, the trace is sealed and queued for ingest.
+
+## 3. Add spans
+
+```typescript
+await tl.trace("answer_question", async (trace) => {
+  trace.setInput({ question });
+
+  const docs = await trace.span("retrieve", "retrieval", async (span) => {
+    const results = await vectorStore.search(question, 5);
+    span.setOutput({ docCount: results.length });
+    return results;
+  });
+
+  const answer = await trace.span("generate", "llm", async (span) => {
+    span.setModel("gpt-4o-mini");
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: buildMessages(question, docs),
+    });
+    span.setOutput(response.choices[0].message.content);
+    span.setTokens({
+      promptTokens: response.usage!.prompt_tokens,
+      completionTokens: response.usage!.completion_tokens,
+    });
+    return response.choices[0].message.content;
+  });
+
+  trace.setOutput({ answer });
+});
+```
+
+## 4. Auto-instrument OpenAI
+
+```typescript
+import OpenAI from "openai";
+import { instrumentOpenAI } from "@trulayer/sdk";
+
+const openai = instrumentOpenAI(new OpenAI(), tl);
+
+await tl.trace("answer_question", async (trace) => {
+  trace.setInput({ question });
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: question }],
+  });
+  trace.setOutput(response.choices[0].message.content);
+});
+```
+
+## 5. Auto-instrument Anthropic
+
+```typescript
+import Anthropic from "@anthropic-ai/sdk";
+import { instrumentAnthropic } from "@trulayer/sdk";
+
+const anthropic = instrumentAnthropic(new Anthropic(), tl);
+
+await tl.trace("answer_question", async (trace) => {
+  const message = await anthropic.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1024,
+    messages: [{ role: "user", content: question }],
+  });
+  trace.setOutput(message.content);
+});
+```
+
+## 6. Vercel AI SDK
+
+The Vercel AI SDK has first-class support via `instrumentVercelAI()`. It hooks into `generateText`, `streamText`, `generateObject`, and `streamObject` so every call is traced without further changes.
+
+```typescript
+import { instrumentVercelAI } from "@trulayer/sdk";
+import { openai as aiOpenAI } from "@ai-sdk/openai";
+import { generateText } from "ai";
+
+instrumentVercelAI(tl);
+
+await tl.trace("chat", async (trace) => {
+  const { text } = await generateText({
+    model: aiOpenAI("gpt-4o-mini"),
+    prompt: question,
+  });
+  trace.setOutput({ text });
+});
+```
+
+See [Vercel AI SDK integration](/integrations/vercel-ai-sdk) for streaming and tool-calling specifics.
+
+## 7. Next.js App Router
+
+Instrument once in `instrumentation.ts` at your app root — Next.js loads this file before any route handler runs.
+
+```typescript
+// instrumentation.ts
+import { TruLayer } from "@trulayer/sdk";
+
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { instrumentOpenAI } = await import("@trulayer/sdk");
+    const OpenAI = (await import("openai")).default;
+
+    const tl = new TruLayer({
+      apiKey: process.env.TRULAYER_API_KEY!,
+      project: "web",
+    });
+
+    // Make the patched client available to your routes
+    (globalThis as any).openai = instrumentOpenAI(new OpenAI(), tl);
+    (globalThis as any).trulayer = tl;
+  }
+}
+```
+
+Then from a route handler:
+
+```typescript
+// app/api/chat/route.ts
+export async function POST(req: Request) {
+  const tl = (globalThis as any).trulayer as TruLayer;
+  const openai = (globalThis as any).openai;
+
+  return tl.trace("chat", async (trace) => {
+    const { message } = await req.json();
+    trace.setInput({ message });
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: message }],
+    });
+
+    trace.setOutput(response.choices[0].message.content);
+    return Response.json({ answer: response.choices[0].message.content });
+  });
+}
+```
+
+## 8. Edge runtimes (Vercel Edge, Cloudflare Workers)
+
+The SDK works in Edge runtimes — it uses native `fetch` with no Node-specific APIs. One caveat: Edge runtimes terminate the isolate quickly, so always `await tl.flush()` before returning your response.
+
+```typescript
+export async function POST(req: Request) {
+  try {
+    return await tl.trace("edge_chat", async (trace) => {
+      // ... work ...
+      return Response.json({ ok: true });
+    });
+  } finally {
+    await tl.flush();
+  }
+}
+```
+
+## 9. Group into a session
+
+```typescript
+await tl.trace("user_message", async (trace) => {
+  trace.setInput({ message });
+}, { sessionId: conversationId });
+```
+
+## 10. Attach metadata
+
+```typescript
+await tl.trace("answer_question", async (trace) => {
+  trace.setMetadata({
+    userId: "u_42",
+    tier: "pro",
+    featureFlagRagV2: true,
+  });
+});
+```
+
+## 11. Submit feedback
+
+```typescript
+await tl.submitFeedback({
+  traceId,
+  label: "good",
+  score: 0.95,
+  comment: "Exactly what I needed.",
+});
+```
+
+Return `trace.id` from your handler so the client can attach feedback to the right trace.
+
+## 12. PII scrubbing
+
+```typescript
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "prod",
+  scrubFn: (value) => {
+    if (typeof value === "string") {
+      return value
+        .replace(/\b[\w.+-]+@[\w.-]+\.\w{2,}\b/gi, "[email]")
+        .replace(/\b\d{13,16}\b/g, "[cc]");
+    }
+    return value;
+  },
+});
+```
+
+## 13. Graceful shutdown
+
+Serverless functions should flush before returning; long-lived services should flush on SIGTERM.
+
+```typescript
+process.on("SIGTERM", async () => {
+  await tl.shutdown();
+  process.exit(0);
+});
+```

@@ -1,0 +1,169 @@
+---
+title: "TypeScript SDK reference"
+description: "Every public export of @trulayer/sdk."
+---
+
+For narrative usage see the [tutorial](/sdks/typescript/tutorial). For config details see [configuration](/sdks/typescript/configuration).
+
+## `TruLayer` class
+
+The main client. Import and construct once per app.
+
+```typescript
+import { TruLayer } from "@trulayer/sdk";
+
+const tl = new TruLayer({
+  apiKey: string,
+  project: string,
+  environment?: string,
+  endpoint?: string,
+  batchSize?: number,
+  flushInterval?: number,
+  timeout?: number,
+  sampleRate?: number | (() => boolean),
+  scrubFn?: (value: unknown) => unknown,
+  metadataValidator?: (meta: Record<string, unknown>) => boolean,
+  debug?: boolean,
+});
+```
+
+### Methods
+
+| Method | Signature | Returns |
+| ------ | --------- | ------- |
+| `trace` | `(name, fn, opts?)` | `Promise<T>` where `T` is the fn's resolved value |
+| `submitFeedback` | `({ traceId, label?, score?, comment?, metadata? })` | `Promise<void>` |
+| `runEval` | `({ traceId, evaluatorType, metricName })` | `Promise<EvalResult>` |
+| `getMetrics` | `({ projectId, from, to, filters? })` | `Promise<Metrics>` |
+| `getTraces` | `({ projectId?, from?, to?, cursor?, limit?, filters? })` | `Promise<TracesPage>` |
+| `getTrace` | `(id)` | `Promise<TraceData>` |
+| `flush` | `()` | `Promise<void>` |
+| `shutdown` | `()` | `Promise<void>` |
+
+### `trace()`
+
+```typescript
+await tl.trace(
+  name: string,
+  fn: (trace: TraceContext) => Promise<T> | T,
+  options?: { sessionId?: string; metadata?: Record<string, unknown> },
+): Promise<T>
+```
+
+The return value of `fn` becomes the return value of `trace()`. Exceptions are captured onto the trace as errors, then re-thrown.
+
+## `TraceContext`
+
+Passed to the `trace()` callback.
+
+| Method | Purpose |
+| ------ | ------- |
+| `setInput(value)` | Trace input |
+| `setOutput(value)` | Trace output |
+| `setMetadata(obj)` | Merge key-value metadata |
+| `setError(err)` | Mark errored |
+| `span(name, type, fn)` | Create a child span (see below) |
+| `id` (getter) | Trace UUID |
+| `sessionId` (getter) | Session ID if set |
+
+### `span()`
+
+```typescript
+await trace.span(
+  name: string,
+  type: "llm" | "retrieval" | "tool" | "custom",
+  fn: (span: SpanContext) => Promise<T> | T,
+): Promise<T>
+```
+
+## `SpanContext`
+
+| Method | Purpose |
+| ------ | ------- |
+| `setInput(value)` | Span input |
+| `setOutput(value)` | Span output |
+| `setMetadata(obj)` | Metadata |
+| `setModel(name)` | Model name (for `llm` spans) |
+| `setTokens({ promptTokens, completionTokens })` | Token counts |
+| `setError(err)` | Mark errored |
+| `id` (getter) | Span UUID |
+
+## Instrumentation helpers
+
+### `instrumentOpenAI(client, tl?)`
+
+```typescript
+import OpenAI from "openai";
+import { instrumentOpenAI } from "@trulayer/sdk";
+
+const openai = instrumentOpenAI(new OpenAI(), tl);
+```
+
+Returns a Proxy-wrapped client; every `chat.completions.create` and `embeddings.create` call becomes a span automatically.
+
+### `instrumentAnthropic(client, tl?)`
+
+```typescript
+import Anthropic from "@anthropic-ai/sdk";
+import { instrumentAnthropic } from "@trulayer/sdk";
+
+const anthropic = instrumentAnthropic(new Anthropic(), tl);
+```
+
+### `instrumentVercelAI(tl?)`
+
+```typescript
+import { instrumentVercelAI } from "@trulayer/sdk";
+
+instrumentVercelAI(tl);
+// every generateText/streamText/generateObject/streamObject from "ai" is now traced
+```
+
+## Module-level helpers
+
+### `init()` / `getClient()`
+
+If you prefer a global pattern over passing `tl` explicitly:
+
+```typescript
+import { init, getClient } from "@trulayer/sdk";
+
+init({ apiKey: "...", project: "..." });
+
+const tl = getClient();
+```
+
+## Types
+
+All of the following are exported type-only (no runtime cost):
+
+```typescript
+import type {
+  TruLayerConfig,
+  TraceData,
+  SpanData,
+  SpanType,       // "llm" | "retrieval" | "tool" | "custom"
+  FeedbackData,
+  EvalResult,
+  Metrics,
+} from "@trulayer/sdk";
+```
+
+## Error handling
+
+SDK errors are logged, not thrown to your code — a failed flush drops traces but never interrupts your app. Subscribe to errors with:
+
+```typescript
+tl.onError((err) => {
+  console.error("trulayer:", err);
+});
+```
+
+Exception types (re-exported for narrowing):
+
+| Class | Reason |
+| ----- | ------ |
+| `TruLayerError` | Base class |
+| `AuthenticationError` | Invalid API key |
+| `RateLimitError` | Plan limit hit |
+| `ValidationError` | Bad trace/span payload |

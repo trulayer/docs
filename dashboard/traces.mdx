@@ -1,0 +1,74 @@
+---
+title: "Traces"
+description: "Browse and inspect every trace your app has sent."
+---
+
+The **Traces** page is the main debugging surface — every trace your instrumented app sends lands here within a few seconds of ingest.
+
+## List view
+
+Columns:
+
+- **Timestamp** — when the trace started
+- **Name** — the trace name you passed to `trace()`
+- **Session** — `session_id` if set, clickable to jump to the session view
+- **Duration** — wall-clock span from start to last-span-end
+- **Tokens** — prompt + completion totals across all `llm` spans
+- **Cost** — computed from tokens × model price
+- **Status** — `ok` / `error`
+- **Feedback** — thumbs-up/down icon if feedback is attached
+
+## Filters
+
+All filters compose. Combine freely.
+
+- **Time range** — inherits from the global picker; override here for fine-grained queries.
+- **Project** — scope to a single project ID.
+- **Model** — any `llm` span in the trace used this model.
+- **Error only** — traces that ended with `setError()` or an uncaught exception.
+- **Metadata** — any key-value filter; use `metadata.tier = "pro"` syntax.
+- **Tags** — if you tag traces via `metadata`, filter by tag value.
+- **Search** — full-text over trace names and input/output content (respects your scrub function — redacted fields aren't searchable).
+
+## Trace detail
+
+Click any row to open the detail view. You'll see:
+
+### Header
+
+- Trace ID (copy icon — useful for support requests)
+- Start time, duration, session link
+- Total tokens and cost
+- Attached feedback (if any)
+- Attached eval results (if any)
+
+### Span waterfall
+
+A Gantt-style visualisation of every span. Hover any span to see:
+
+- Input and output (JSON-pretty-printed, syntax-highlighted)
+- Latency and token counts (for `llm` spans)
+- Model, metadata, errors
+
+Nested spans appear indented under their parent. Failed spans are highlighted red.
+
+### Raw JSON
+
+The tab in the top-right shows the full trace payload as JSON — useful for debugging the SDK itself or replaying elsewhere.
+
+## Keyboard
+
+| Key | Action |
+| --- | ------ |
+| `j` / `k` | Next / previous trace in list |
+| `Enter` | Open selected trace |
+| `Esc` | Close detail |
+| `/` | Focus search |
+
+## Common workflows
+
+**Debug a production error:** filter by **Error only** and the last hour. Open any failing trace — the red span in the waterfall is the culprit.
+
+**Check latency regressions:** filter by **Model** = your production model, sort by Duration desc. Outliers rise to the top.
+
+**Investigate a user complaint:** if they gave you a trace ID (or session ID), paste it into search. Filter by their user identifier (e.g. `metadata.user_id = "u_42"`) to see every trace from that user.

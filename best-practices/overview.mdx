@@ -1,0 +1,93 @@
+---
+title: "Best practices"
+description: "Patterns for production-grade tracing on TruLayer."
+---
+
+Rules collected from teams running TruLayer in production. Each has a reason — if your situation breaks the reason, the rule probably doesn't apply.
+
+## Tracing structure
+
+**Create one trace per user-facing unit of work.** One HTTP request = one trace. One agent turn = one trace. Don't span a trace across multiple user requests — those belong in a [session](/concepts/sessions) instead.
+
+**Nest spans to match the call graph.** An agent loop with 3 tool calls and 2 LLM calls should have 5 child spans, not a flat list. Dashboard waterfall views surface latency bottlenecks best when the structure reflects what actually happened.
+
+**Name spans by what they do, not by which function they're in.** `retrieve_docs` beats `searchHelper`. Names are user-facing in the dashboard — treat them like API routes.
+
+## Metadata hygiene
+
+**Attach feature flags and experiment arms.** Future you will filter traces by `rag_v2: true` to compare versions. Attach the flags at trace creation, not deep in a span.
+
+**Never put PII or secrets in metadata.** Metadata is tenant-wide and readable by every team member. Hash or pseudonymise user identifiers before attaching.
+
+**Keep metadata small.** Values are indexed for filtering — multi-KB blobs bloat the index and slow queries. Put bulk data in `setOutput()` instead.
+
+## Cost & latency on every LLM span
+
+Always call `setModel()` and `setTokens()` on `llm` spans — otherwise the [Metrics](/concepts/metrics) views can't compute cost. Auto-instrumentation does this for you; only manual `llm` spans need attention.
+
+If you use a model not in TruLayer's price table (self-hosted, custom provider), attach `metadata.cost_usd` and it'll be used instead.
+
+## PII redaction
+
+**Configure `scrub_fn` / `scrubFn` at init time.** It's the last thing that runs before data leaves your process. Never "fix it later on the dashboard side" — by then, PII is already persisted.
+
+**Test your scrubber.** Add a unit test that passes known-bad inputs through the scrubber and asserts redaction. This is the one test that matters for compliance audits.
+
+**Scrub metadata too.** The SDK applies `scrub_fn` to inputs and outputs. If you put email addresses in metadata, wrap them yourself.
+
+## Error handling
+
+**Let exceptions propagate.** The SDK captures them automatically onto the active trace/span. Don't try/except just to swallow — the dashboard's failure clustering relies on real exception types.
+
+**Use `setError(exc)` only for handled failures** — cases where your code caught the error, decided what to do, and wants the trace to show the failure explicitly.
+
+**Don't over-report.** A 404 from a vector store when querying a new user's empty namespace is expected behaviour, not an error. Catch it and call `setOutput({ result: "empty" })` instead.
+
+## Sampling
+
+**Run at 100% in staging and new features.** You need every trace until you've shaken out bugs.
+
+**Drop to 10–20% in stable production paths** if ingest cost becomes an issue. Use deterministic sampling (based on `trace_id` hash) — that way every span in a sampled trace is kept, and you can reliably sample the same trace across retries.
+
+**Never sample errors.** A simple pattern:
+
+```python
+import random, trulayer
+
+def sample(ctx):
+    if ctx.has_error:
+        return True
+    return random.random() < 0.1
+
+trulayer.init(..., sample_rate=sample)
+```
+
+## Local & test mode
+
+**Use `debug=true` in tests.** It logs payloads to stdout instead of shipping them. Pair with a Jest/pytest snapshot to assert on trace shape without a network.
+
+**Or point at a mock server.** Your CI can run `openapi-mock` against `api-reference/openapi.yaml` and set `endpoint` to `http://localhost:...`. TruLayer's demo repos use this pattern.
+
+## Sessions
+
+**`session_id` should be stable across a conversation.** For chat apps: `session_id = conversation_id`. For agents: `session_id = run_id`. For workflows: `session_id = workflow_instance_id`.
+
+**Don't mix sessions and user IDs.** A user ID in `session_id` groups *every message that user ever sends* under one session — that defeats session-scoped debugging.
+
+## Feedback
+
+**Submit on every interaction, not just opt-in.** A regenerate button is a strong "bad" signal. An accept-and-copy is a strong "good" signal. Implicit feedback beats optional star ratings.
+
+**Attach the feedback source.** `metadata: { source: "thumbs_button" }` vs `"regenerate_click"` lets the dashboard distinguish spontaneous from elicited feedback — they correlate differently with eval scores.
+
+## API keys
+
+**One key per environment, not one per developer.** Rotate on leaves, not on manual request. Use Clerk-managed personal accounts for humans accessing the dashboard.
+
+**Never embed a key in browser code.** Relay through your server. Keys are tenant-scoped — a leaked key is full read/write access to every project.
+
+## Performance
+
+**The SDK is non-blocking.** If you see tracing latency on the request path, something is wrong — check for `flush()` calls in the hot path (they shouldn't be there).
+
+**Flush only on shutdown, or at the end of serverless handlers.** In between, the background worker handles flushing.

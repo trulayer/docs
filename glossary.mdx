@@ -1,0 +1,92 @@
+---
+title: "Glossary"
+description: "Every TruLayer term, defined once."
+---
+
+## Agent
+
+An AI system that makes multiple LLM calls and tool calls in a loop to accomplish a goal. In TruLayer, one agent turn is usually one [trace](/concepts/traces-and-spans), with each LLM call and tool call as child spans.
+
+## API key
+
+A `tl_`-prefixed bearer token that authenticates SDK and server-side API requests. Shown in plaintext once at creation; only an HMAC hash is stored. Tenant-scoped — grants access to every project in your organisation. Manage in Dashboard → Settings → API keys.
+
+## Batch
+
+A group of traces shipped to the ingest API in one request. The SDK batches automatically — default `batchSize` is 50 traces or 2 seconds, whichever comes first.
+
+## Control loop
+
+TruLayer's planned feature (V2, 2027 Q1) for real-time automated responses to failures — kill switches, auto-retries, fallback model routing. Not yet GA. See the [roadmap](https://github.com/trulayer/trulayer#roadmap).
+
+## Dataset
+
+A named collection of traces used for regression testing. Running an [eval](#eval) over a dataset produces a score-per-trace that you can compare across app versions.
+
+## Eval
+
+An automated judgement of a trace, producing a `score`, `label`, and optional `reasoning`. Types: `llm` (an LLM judges against a rubric) and `rule` (deterministic code). See [Evaluations](/concepts/evals).
+
+## Event
+
+A discrete log entry within a trace — e.g. "cache hit", "fallback triggered". Lower-weight than a span; no duration, just a timestamp and metadata.
+
+## Feedback
+
+A human-provided label on a trace — thumbs up/down, numeric score, free-text comment. See [Feedback](/concepts/feedback).
+
+## Fluid Compute
+
+Vercel's default serverless runtime (reuses instances across concurrent requests, full Node.js support). The TruLayer dashboard runs on Fluid Compute. Not to be confused with the TruLayer SDK, which runs anywhere.
+
+## Hallucination
+
+An LLM output that's confident but factually wrong. The `hallucination` built-in evaluator scores traces for this using an LLM judge with access to the retrieved context.
+
+## Ingest
+
+The act of shipping a trace from your app to TruLayer via `POST /v1/ingest` (single) or `POST /v1/ingest/batch` (batch). Handled automatically by the SDKs.
+
+## Instrumentation
+
+Code that creates traces and spans. Manual instrumentation: calling `trace()` / `span()` yourself. Auto-instrumentation: `instrument_openai()` and friends, which monkey-patch a provider client so every call becomes a span.
+
+## Metric
+
+An aggregated number over traces — error rate, p95 latency, total cost, feedback positive rate. Computed continuously; query via `/v1/metrics` or the dashboard. See [Metrics](/concepts/metrics).
+
+## OpenAPI
+
+The machine-readable spec of the TruLayer HTTP API — `backend/api/openapi.yaml` in the backend repo, mirrored to `docs/api-reference/openapi.yaml` here. The [API reference](/api-reference/introduction) is auto-generated from it.
+
+## Project
+
+A logical grouping within a tenant. Typical usage: one project per app (e.g. `rag-prod`, `agent-staging`). Created implicitly on first trace ingest; scoped by project in the dashboard.
+
+## Sampling
+
+Sending only a fraction of traces to TruLayer, controlled by `sample_rate`. Applied per trace (so all spans of a sampled trace are kept). Use deterministic sampling (hash-based) when consistency matters across retries.
+
+## Scrub function
+
+A callback passed to `init()` that's run over every trace/span input and output before the data leaves your process. The mechanism for PII redaction.
+
+## Session
+
+A group of traces tied to the same conversation or workflow by `session_id`. See [Sessions](/concepts/sessions).
+
+## Span
+
+A step within a [trace](#trace). Types: `llm`, `retrieval`, `tool`, `custom`. Has duration, input, output, optional error. See [Traces and spans](/concepts/traces-and-spans).
+
+## Tag
+
+A string label attached to a trace for filtering. Lighter-weight than metadata — meant for categorical filters in the dashboard.
+
+## Tenant
+
+A TruLayer organisation — maps 1:1 to a Clerk Organization. All your projects, API keys, and users live inside one tenant.
+
+## Trace
+
+One end-to-end unit of work — typically one user request, one agent turn, or one background job. Contains one or more spans. See [Traces and spans](/concepts/traces-and-spans).

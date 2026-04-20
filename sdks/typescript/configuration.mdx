@@ -1,0 +1,88 @@
+---
+title: "TypeScript SDK configuration"
+description: "Every option you can pass to the TruLayer constructor."
+---
+
+## Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `apiKey` | `string` | required | TruLayer API key (`tl_...`) |
+| `project` | `string` | required | Project identifier — any string |
+| `environment` | `string` | `"production"` | Filter label |
+| `endpoint` | `string` | `https://api.trulayer.ai` | Override for self-hosted |
+| `batchSize` | `number` | `50` | Spans per flush |
+| `flushInterval` | `number` | `2000` | ms between flushes |
+| `timeout` | `number` | `5000` | HTTP timeout (ms) |
+| `sampleRate` | `number \| () => boolean` | `1.0` | Fraction of traces to send |
+| `scrubFn` | `(value: unknown) => unknown` | `undefined` | Redact inputs/outputs before ingest |
+| `metadataValidator` | `(meta: Record<string, unknown>) => boolean` | `undefined` | Return false to reject |
+| `debug` | `boolean` | `false` | Log payloads locally |
+
+## Example — production
+
+```typescript
+import { TruLayer } from "@trulayer/sdk";
+
+export const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "prod",
+  environment: "production",
+  batchSize: 50,
+  flushInterval: 2000,
+  scrubFn: (value) => {
+    if (typeof value !== "string") return value;
+    return value
+      .replace(/\b[\w.+-]+@[\w.-]+\.\w{2,}\b/gi, "[email]")
+      .replace(/\b\d{13,16}\b/g, "[cc]");
+  },
+});
+```
+
+## Example — offline/test
+
+```typescript
+const tl = new TruLayer({
+  apiKey: "tl_local",
+  project: "test",
+  debug: true,
+});
+```
+
+Or mock server:
+
+```typescript
+const tl = new TruLayer({
+  apiKey: "tl_local",
+  project: "test",
+  endpoint: "http://localhost:4010",
+});
+```
+
+## Sampling
+
+Static fraction:
+
+```typescript
+new TruLayer({ ..., sampleRate: 0.1 }); // 10%
+```
+
+Dynamic (evaluated per trace):
+
+```typescript
+new TruLayer({
+  ...,
+  sampleRate: () => Math.random() < 0.1,
+});
+```
+
+Sampling is applied at trace creation — a sampled trace always includes every one of its spans.
+
+## Flush & shutdown
+
+```typescript
+await tl.flush();     // ship buffered traces, resolve when done
+await tl.shutdown();  // flush + stop background work
+```
+
+Call `flush()` before returning a response in serverless/Edge functions. Call `shutdown()` on `SIGTERM` in long-lived servers.

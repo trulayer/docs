@@ -1,0 +1,14 @@
+{
+  "name": "@trulayer/docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Public developer documentation for TruLayer, hosted on Mintlify.",
+  "scripts": {
+    "dev": "mint dev",
+    "broken-links": "mint broken-links",
+    "sync-openapi": "cp ../backend/api/openapi.yaml api-reference/openapi.yaml && echo 'Synced: api-reference/openapi.yaml'"
+  },
+  "devDependencies": {
+    "mint": "^4"
+  }
+}

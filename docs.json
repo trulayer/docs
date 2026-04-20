@@ -43,7 +43,39 @@
           {
             "group": "TypeScript SDK",
             "pages": [
-              "sdks/typescript/overview"
+              "sdks/typescript/overview",
+              "sdks/typescript/tutorial",
+              "sdks/typescript/configuration",
+              "sdks/typescript/reference"
+            ]
+          },
+          {
+            "group": "Dashboard",
+            "pages": [
+              "dashboard/overview",
+              "dashboard/traces",
+              "dashboard/evals",
+              "dashboard/metrics"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/overview",
+              "integrations/openai",
+              "integrations/anthropic"
+            ]
+          },
+          {
+            "group": "Best practices",
+            "pages": [
+              "best-practices/overview"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "glossary"
             ]
           },
           {

@@ -1,0 +1,51 @@
+---
+title: "Dashboard overview"
+description: "What's in the TruLayer dashboard and where to find it."
+---
+
+The dashboard ([app.trulayer.ai](https://app.trulayer.ai)) is the primary surface for reading traces, running evals, and managing your account. This section walks through each page.
+
+## Sections
+
+<CardGroup cols={2}>
+  <Card title="Traces" icon="route" href="/dashboard/traces">
+    Browse every trace your app sent, filter, inspect spans.
+  </Card>
+  <Card title="Evals" icon="flask" href="/dashboard/evals">
+    Eval results, datasets, regression runs, metric trends.
+  </Card>
+  <Card title="Metrics" icon="chart-line" href="/dashboard/metrics">
+    Error rate, latency percentiles, cost over time.
+  </Card>
+  <Card title="Feedback" icon="thumbs-up" href="/dashboard/feedback">
+    Human labels on traces — review, export, build datasets.
+  </Card>
+  <Card title="Failures" icon="triangle-exclamation" href="/dashboard/failures">
+    Clustered failures and root-cause analysis.
+  </Card>
+  <Card title="Settings" icon="gear" href="/dashboard/settings">
+    API keys, usage, billing, team.
+  </Card>
+</CardGroup>
+
+## Auth & access
+
+- Sign in via [app.trulayer.ai/sign-in](https://app.trulayer.ai/sign-in) — Google, GitHub, email, or SAML SSO for enterprise orgs.
+- Every user belongs to one or more **Clerk Organizations**, which map 1:1 to TruLayer tenants.
+- Switching organisations in the top-left switches the tenant you're viewing.
+
+## Roles
+
+| Role | Can view | Can write | Can manage billing |
+| ---- | -------- | --------- | ------------------ |
+| Owner | Everything | Everything | Yes |
+| Member | Everything | Traces, evals, feedback | No |
+| Viewer | Read-only | No | No |
+
+Role assignment is in **Settings → Team**.
+
+## Tips
+
+- `/` opens the command palette from anywhere.
+- `g t`, `g e`, `g m`, `g f` jump to Traces, Evals, Metrics, Feedback.
+- The time range picker in the top-right applies to every chart and list on the current page.
