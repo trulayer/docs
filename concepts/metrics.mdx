@@ -1,0 +1,61 @@
+---
+title: "Metrics"
+description: "Aggregated views across traces."
+---
+
+**Metrics** are rolling aggregations over traces. TruLayer computes them continuously and surfaces them in the dashboard and via the `/v1/metrics` endpoint.
+
+## Built-in metrics
+
+| Metric | Description |
+| ------ | ----------- |
+| `error_rate` | Fraction of traces that ended in error over the window |
+| `latency_p50`, `latency_p95`, `latency_p99` | Trace latency percentiles |
+| `total_cost` | Sum of `(prompt_tokens + completion_tokens) × model_price` across traces |
+| `trace_count` | Number of traces in the window |
+| `feedback_good_rate` | Fraction of feedback-labeled traces with `label="good"` |
+
+## Query
+
+<CodeGroup>
+```python Python
+import trulayer
+from datetime import datetime, timedelta
+
+client = trulayer.get_client()
+metrics = client.get_metrics(
+    project_id="rag-app",
+    from_time=datetime.utcnow() - timedelta(hours=1),
+    to_time=datetime.utcnow(),
+)
+print(metrics.error_rate, metrics.latency_p95, metrics.total_cost)
+```
+
+```typescript TypeScript
+const metrics = await tl.getMetrics({
+  projectId: "rag-app",
+  from: new Date(Date.now() - 60 * 60 * 1000),
+  to: new Date(),
+});
+console.log(metrics.errorRate, metrics.latencyP95, metrics.totalCost);
+```
+
+```bash curl
+curl "https://api.trulayer.ai/v1/metrics?project_id=rag-app&from=2026-04-19T00:00:00Z&to=2026-04-19T23:59:59Z" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+</CodeGroup>
+
+## In the dashboard
+
+The **Metrics** page shows these metrics as time-series charts. You can:
+
+- Filter by project, model, or tag
+- Overlay multiple metrics on the same axis
+- Drill from any point into the underlying traces
+
+## Cost calculation
+
+TruLayer maintains a per-model price table for major providers (OpenAI, Anthropic, Google, Cohere). Cost is computed at ingest time and stored on the trace so historical reports are stable even when upstream prices change.
+
+For custom models or providers, attach `metadata.cost_usd` to the LLM span and TruLayer will use it instead of the price table.

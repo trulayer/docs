@@ -1,97 +1,51 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "TruLayer Documentation"
+description: "The truth layer for AI systems — observability, evaluation, debugging, feedback, and control for LLM applications."
 ---
 
-## Setting up
+TruLayer is a reliability platform for AI applications. Instrument your app with one of our SDKs, and you get end-to-end traces of every prompt, tool call, retrieval, and response — plus automated evaluations, user feedback capture, and real-time failure detection.
 
-Get your documentation site up and running in minutes.
+## Start here
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install the SDK and send your first trace in under 10 minutes.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Core concepts" icon="diagram-project" href="/concepts/overview">
+    Understand traces, spans, sessions, evals, feedback, and metrics.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## SDKs
 
-Everything you need to create world-class documentation.
+<CardGroup cols={2}>
+  <Card title="Python SDK" icon="python" href="/sdks/python/overview">
+    `pip install trulayer` — auto-instrumentation for OpenAI, Anthropic, LangChain.
+  </Card>
+  <Card title="TypeScript SDK" icon="js" href="/sdks/typescript/overview">
+    `npm install @trulayer/sdk` — zero-dependency, Node/Edge/Bun compatible.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Reference
 
-## Need inspiration?
+<CardGroup cols={2}>
+  <Card title="HTTP API" icon="terminal" href="/api-reference/introduction">
+    Every endpoint, request shape, and response — auto-generated from our OpenAPI spec.
+  </Card>
+  <Card title="Dashboard" icon="chart-line" href="https://app.trulayer.ai">
+    Traces, evals, metrics, failures, and team settings.
+  </Card>
+</CardGroup>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## What TruLayer gives you
+
+- **Observability** — full trace capture (prompt → tools → outputs), session replay, failure classification.
+- **Evaluations** — automated eval pipelines with metrics for correctness, hallucination, and safety; regression testing against datasets.
+- **Debugging** — step-by-step reasoning inspection, tool-call validation, error clustering.
+- **Feedback** — user feedback ingestion, auto-labeling, continuous dataset generation.
+- **Control** — real-time failure detection, auto-retry and fallback strategies, dynamic model routing.
+
+<Note>
+  **New here?** The [Quickstart](/quickstart) gets you from zero to a trace in the dashboard in under 10 minutes. If you prefer to understand the model before writing code, start with [Core concepts](/concepts/overview).
+</Note>

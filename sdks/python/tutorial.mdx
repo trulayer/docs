@@ -1,0 +1,240 @@
+---
+title: "Python SDK tutorial"
+description: "A step-by-step walkthrough from manual tracing to production-ready instrumentation."
+---
+
+This tutorial takes you from a blank Python script to a production-ready instrumented app. Each step is independent — skip ahead if you know the material.
+
+<Info>
+  All examples assume `TRULAYER_API_KEY` and `OPENAI_API_KEY` are exported. Install with `pip install trulayer openai anthropic`.
+</Info>
+
+## 1. Initialise the SDK
+
+Call `trulayer.init()` once at app startup. It creates a global client that's used implicitly by everything else.
+
+```python
+import os
+import trulayer
+
+trulayer.init(
+    api_key=os.environ["TRULAYER_API_KEY"],
+    project="tutorial",       # any string — creates projects on first use
+    environment="development", # free-form; used as a filter in the dashboard
+)
+```
+
+If you need multiple clients (multi-tenant app, testing), construct `TruLayerClient` directly instead.
+
+## 2. Manually trace a block of code
+
+The simplest unit of instrumentation is the `trace()` context manager.
+
+```python
+import trulayer
+
+with trulayer.trace("answer_question") as trace:
+    trace.set_input({"question": "What is TruLayer?"})
+
+    answer = my_agent(question)
+
+    trace.set_output({"answer": answer})
+```
+
+Everything between the `with` and the end of the block is captured as one trace.
+
+## 3. Add spans for sub-steps
+
+Within a trace, create spans to break down the work.
+
+```python
+with trulayer.trace("answer_question") as trace:
+    trace.set_input({"question": question})
+
+    with trace.span("retrieve", span_type="retrieval") as span:
+        docs = vector_store.search(question, k=5)
+        span.set_output({"doc_count": len(docs)})
+
+    with trace.span("generate", span_type="llm") as span:
+        span.set_model("gpt-4o-mini")
+        response = generate_with_context(question, docs)
+        span.set_output(response)
+
+    trace.set_output({"answer": response})
+```
+
+See [Traces and spans](/concepts/traces-and-spans) for the full span type catalogue.
+
+## 4. Auto-instrument OpenAI
+
+Skip the manual span wrapping — `instrument_openai()` patches the client so every `chat.completions.create()` call automatically becomes a span inside the currently-active trace.
+
+```python
+from openai import OpenAI
+import trulayer
+
+client = OpenAI()
+trulayer.instrument_openai(client)
+
+with trulayer.trace("answer_question") as trace:
+    trace.set_input({"question": question})
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": question}],
+    )
+    trace.set_output(response.choices[0].message.content)
+```
+
+The resulting trace has one `llm` span containing the full messages array, the response, tokens, latency, and the model name — no extra code.
+
+## 5. Auto-instrument Anthropic
+
+Identical pattern for the Anthropic SDK.
+
+```python
+from anthropic import Anthropic
+import trulayer
+
+client = Anthropic()
+trulayer.instrument_anthropic(client)
+
+with trulayer.trace("answer_question"):
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": question}],
+    )
+```
+
+## 6. Use LangChain
+
+LangChain integration uses a callback handler rather than monkey-patching.
+
+```python
+from langchain_openai import ChatOpenAI
+import trulayer
+
+handler = trulayer.instrument_langchain()
+
+llm = ChatOpenAI(model="gpt-4o-mini", callbacks=[handler])
+chain = prompt_template | llm
+
+with trulayer.trace("summarize"):
+    result = chain.invoke({"text": long_text})
+```
+
+The handler creates spans for every LLM call, tool invocation, and retriever call in the chain.
+
+## 7. Async usage
+
+Use `atrace()` and await `span()` on async contexts.
+
+```python
+import asyncio
+import trulayer
+from openai import AsyncOpenAI
+
+client = AsyncOpenAI()
+trulayer.instrument_openai(client)
+
+async def handle(question: str):
+    async with trulayer.atrace("answer_question") as trace:
+        trace.set_input({"question": question})
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": question}],
+        )
+        trace.set_output(response.choices[0].message.content)
+```
+
+Traces are carried via `contextvars`, so they survive across `asyncio.gather()` and task spawns automatically.
+
+## 8. Group traces into a session
+
+Pass `session_id` when starting a trace to group multiple traces as one conversation.
+
+```python
+with trulayer.trace("user_message", session_id=conversation_id) as trace:
+    ...
+```
+
+All traces sharing the same `session_id` appear together in the dashboard's session view. See [Sessions](/concepts/sessions).
+
+## 9. Attach metadata
+
+Set any key-value pairs on a trace or span — used as dashboard filters.
+
+```python
+with trulayer.trace("answer_question") as trace:
+    trace.set_metadata(
+        user_id="u_42",
+        tier="pro",
+        feature_flag_rag_v2=True,
+    )
+```
+
+Avoid putting PII or secrets in metadata. Scope is tenant-wide — anyone on the team can see it.
+
+## 10. Submit feedback
+
+Feedback from your UI can be attached to a trace at any time (including after ingestion).
+
+```python
+import trulayer
+
+client = trulayer.get_client()
+client.submit_feedback(
+    trace_id=trace_id,
+    label="good",
+    score=0.95,
+    comment="Exactly what I needed.",
+)
+```
+
+You'll need the `trace_id` — the easiest way is to surface it from `trace.id` inside the `with` block and return it alongside your response.
+
+## 11. Redact PII
+
+Pass a `scrub_fn` at init time to run every input/output through your redaction logic before it leaves the process.
+
+```python
+import re
+
+def scrub(value):
+    if isinstance(value, str):
+        return re.sub(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[email]", value, flags=re.I)
+    return value
+
+trulayer.init(
+    api_key=os.environ["TRULAYER_API_KEY"],
+    project="prod",
+    scrub_fn=scrub,
+)
+```
+
+See [best practices for PII](/concepts/traces-and-spans) and [configuration](/sdks/python/configuration).
+
+## 12. Production configuration
+
+Before shipping, tune:
+
+- `sample_rate` — a value between 0.0 and 1.0; applied at trace creation. Start at 1.0 and lower if ingest cost becomes an issue.
+- `batch_size` / `flush_interval` — defaults are fine for most apps.
+- `scrub_fn` — non-negotiable if your inputs can contain user PII.
+- `metadata_validator` — optional callback to reject traces with malformed metadata.
+
+See full options in [configuration](/sdks/python/configuration).
+
+## 13. Verify shutdown
+
+In short-lived scripts, ensure `trulayer.shutdown()` is called so buffered traces are flushed.
+
+```python
+import atexit
+import trulayer
+
+trulayer.init(api_key="...", project="...")
+atexit.register(trulayer.shutdown)
+```
+
+Long-lived services (web servers) don't need this — batches flush on interval, and most frameworks have graceful-shutdown hooks you can wire up.

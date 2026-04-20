@@ -1,11 +1,11 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "TruLayer",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#6366F1",
+    "light": "#818CF8",
+    "dark": "#4F46E5"
   },
   "favicon": "/favicon.svg",
   "navigation": {
@@ -17,53 +17,55 @@
             "group": "Getting started",
             "pages": [
               "index",
-              "quickstart",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core concepts",
+            "pages": [
+              "concepts/overview",
+              "concepts/traces-and-spans",
+              "concepts/sessions",
+              "concepts/evals",
+              "concepts/feedback",
+              "concepts/metrics"
+            ]
+          },
+          {
+            "group": "Python SDK",
+            "pages": [
+              "sdks/python/overview",
+              "sdks/python/tutorial",
+              "sdks/python/configuration",
+              "sdks/python/reference"
+            ]
+          },
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "sdks/typescript/overview"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
               "development"
-            ]
-          },
-          {
-            "group": "Customization",
-            "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
               "api-reference/introduction"
             ]
           },
           {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
-            ]
+            "group": "Endpoints",
+            "openapi": "api-reference/openapi.yaml"
           }
         ]
       }
@@ -71,14 +73,19 @@
     "global": {
       "anchors": [
         {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
+          "anchor": "Dashboard",
+          "href": "https://app.trulayer.ai",
+          "icon": "chart-line"
         },
         {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
+          "anchor": "Status",
+          "href": "https://status.trulayer.ai",
+          "icon": "signal"
+        },
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/trulayer",
+          "icon": "github"
         }
       ]
     }
@@ -91,32 +98,32 @@
     "links": [
       {
         "label": "Support",
-        "href": "mailto:hi@mintlify.com"
+        "href": "mailto:support@trulayer.ai"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
+      "label": "Sign up",
+      "href": "https://app.trulayer.ai/sign-up"
     }
   },
   "contextual": {
     "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
+      "x": "https://x.com/trulayer_ai",
+      "github": "https://github.com/trulayer",
+      "linkedin": "https://linkedin.com/company/trulayer"
     }
   }
 }

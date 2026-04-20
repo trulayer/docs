@@ -1,0 +1,71 @@
+---
+title: "Feedback"
+description: "Human labels attached to traces."
+---
+
+**Feedback** is a human-provided label on a trace. Typical sources: a thumbs-up / thumbs-down button in your UI, a star rating, or an internal review.
+
+## Shape
+
+| Field | Type | Required |
+| ----- | ---- | -------- |
+| `trace_id` | string | yes |
+| `label` | `"good"` \| `"bad"` \| `"neutral"` | one of label, score, or comment |
+| `score` | float | optional; 0.0 – 1.0 or any numeric rating |
+| `comment` | string | optional free-text |
+| `metadata` | object | optional — user_id, source, etc. |
+
+## Submitting feedback
+
+<CodeGroup>
+```python Python
+import trulayer
+
+client = trulayer.get_client()
+client.submit_feedback(
+    trace_id=trace_id,
+    label="good",
+    score=0.95,
+    comment="Exactly what I needed.",
+    metadata={"user_id": "u_123", "source": "thumbs_button"},
+)
+```
+
+```typescript TypeScript
+await tl.submitFeedback({
+  traceId,
+  label: "good",
+  score: 0.95,
+  comment: "Exactly what I needed.",
+  metadata: { userId: "u_123", source: "thumbs_button" },
+});
+```
+
+```bash curl
+curl https://api.trulayer.ai/v1/feedback \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "trace_id": "01936f...",
+    "label": "good",
+    "score": 0.95,
+    "comment": "Exactly what I needed.",
+    "metadata": {"user_id": "u_123", "source": "thumbs_button"}
+  }'
+```
+</CodeGroup>
+
+## Why feedback matters
+
+Feedback is the source of truth that **evaluators are measured against**. When you publish an eval, TruLayer compares its scores to the feedback on those traces and reports correlation — so you can tell whether your automated evals actually track what humans think is good.
+
+Feedback also flows into **datasets**: traces with consistent human labels are candidates for your regression test set.
+
+## UX patterns
+
+- **Thumbs up / down on response**: submit immediately on click with `label: "good"` or `"bad"`.
+- **Edit/regenerate**: submit `label: "bad"` when the user regenerates — it's a strong implicit signal.
+- **Explicit rating**: expose a 1–5 star widget for low-friction quantitative feedback.
+- **Free-text**: always provide an optional comment field — a handful of qualitative comments are worth more than thousands of thumbs.
+
+Never require feedback. Collection rate is a quality signal too.

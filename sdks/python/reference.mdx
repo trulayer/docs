@@ -1,0 +1,239 @@
+---
+title: "Python SDK reference"
+description: "Every public export in the trulayer package."
+---
+
+This page documents the public surface of `trulayer`. For narrative usage, see the [tutorial](/sdks/python/tutorial). For configuration details, see [configuration](/sdks/python/configuration).
+
+## Module functions
+
+### `trulayer.init()`
+
+Initialise the global client. Call once at app startup.
+
+```python
+trulayer.init(
+    api_key: str,
+    project: str,
+    environment: str = "production",
+    endpoint: str = "https://api.trulayer.ai",
+    batch_size: int = 50,
+    flush_interval: float = 2.0,
+    timeout: float = 5.0,
+    sample_rate: float = 1.0,
+    scrub_fn: Callable[[Any], Any] | None = None,
+    metadata_validator: Callable[[dict], bool] | None = None,
+    debug: bool = False,
+) -> TruLayerClient
+```
+
+Returns the created `TruLayerClient`. Stored as the process-wide global — retrievable via `get_client()`.
+
+### `trulayer.get_client()`
+
+```python
+trulayer.get_client() -> TruLayerClient
+```
+
+Return the global client. Raises `RuntimeError` if `init()` has not been called.
+
+### `trulayer.trace()`
+
+Context manager that starts a new trace.
+
+```python
+trulayer.trace(
+    name: str,
+    session_id: str | None = None,
+    metadata: dict | None = None,
+) -> TraceContext
+```
+
+Usage:
+
+```python
+with trulayer.trace("answer_question") as trace:
+    trace.set_input({"question": question})
+    ...
+    trace.set_output({"answer": answer})
+```
+
+### `trulayer.atrace()`
+
+Async variant of `trace()`. Same signature; used with `async with`.
+
+```python
+async with trulayer.atrace("answer_question") as trace:
+    trace.set_input({"question": question})
+```
+
+### `trulayer.current_trace()`
+
+```python
+trulayer.current_trace() -> TraceContext | None
+```
+
+Return the trace in the current async-local context, or `None` if no trace is active.
+
+### `trulayer.shutdown()`
+
+Flush buffered spans and stop the background worker. Call on process exit.
+
+```python
+trulayer.shutdown()
+```
+
+## Instrumentation helpers
+
+### `trulayer.instrument_openai()`
+
+```python
+trulayer.instrument_openai(client: openai.OpenAI | openai.AsyncOpenAI) -> None
+```
+
+Patch `client.chat.completions.create` and `client.embeddings.create` to emit spans automatically. Reversible via `uninstrument_openai(client)`.
+
+### `trulayer.instrument_anthropic()`
+
+```python
+trulayer.instrument_anthropic(client: anthropic.Anthropic | anthropic.AsyncAnthropic) -> None
+```
+
+Patch `client.messages.create` to emit spans. Reversible via `uninstrument_anthropic(client)`.
+
+### `trulayer.instrument_langchain()`
+
+```python
+trulayer.instrument_langchain() -> BaseCallbackHandler
+```
+
+Return a LangChain callback handler. Pass it to any `ChatModel`, `Chain`, or `Retriever` via the `callbacks=[...]` argument.
+
+## Classes
+
+### `TruLayerClient`
+
+Explicit client for multi-tenant apps or tests. Prefer `init()` + `get_client()` for single-client apps.
+
+```python
+from trulayer import TruLayerClient
+
+client = TruLayerClient(api_key="...", project="...")
+with client.trace("work") as trace:
+    ...
+```
+
+Key methods:
+
+| Method | Signature |
+| ------ | --------- |
+| `trace(name, session_id=None, metadata=None)` | → `TraceContext` |
+| `atrace(name, ...)` | → async `TraceContext` |
+| `submit_feedback(trace_id, label=None, score=None, comment=None, metadata=None)` | → `None` |
+| `run_eval(trace_id, evaluator_type, metric_name)` | → `EvalResult` |
+| `get_metrics(project_id, from_time, to_time, ...)` | → `Metrics` |
+| `flush()` | → `None` (blocks until shipped) |
+| `shutdown()` | → `None` |
+
+### `TraceContext`
+
+Returned by `trace()` and `atrace()`. Key methods:
+
+| Method | Purpose |
+| ------ | ------- |
+| `set_input(value)` | Set the trace's input payload |
+| `set_output(value)` | Set the trace's output payload |
+| `set_metadata(**kwargs)` | Attach key-value metadata |
+| `set_error(exc)` | Mark the trace as errored with an exception |
+| `span(name, span_type="custom", ...)` | → `SpanContext` |
+| `.id` | Trace UUID (read-only) |
+| `.session_id` | Session identifier (read-only) |
+
+### `SpanContext`
+
+Returned by `TraceContext.span()`. Key methods:
+
+| Method | Purpose |
+| ------ | ------- |
+| `set_input(value)` | Span input |
+| `set_output(value)` | Span output |
+| `set_metadata(**kwargs)` | Key-value metadata |
+| `set_model(model)` | Model name (for `llm` spans) |
+| `set_tokens(prompt_tokens, completion_tokens)` | Token counts |
+| `set_error(exc)` | Mark errored |
+| `.id` | Span UUID (read-only) |
+
+## Models (Pydantic)
+
+### `TraceData`
+
+```python
+class TraceData(BaseModel):
+    id: UUID
+    project_id: str
+    session_id: str | None
+    name: str
+    input: Any
+    output: Any
+    error: ErrorInfo | None
+    tags: list[str]
+    metadata: dict[str, Any]
+    spans: list[SpanData]
+    started_at: datetime
+    ended_at: datetime | None
+```
+
+### `SpanData`
+
+```python
+class SpanData(BaseModel):
+    id: UUID
+    trace_id: UUID
+    name: str
+    span_type: Literal["llm", "retrieval", "tool", "custom"]
+    input: Any
+    output: Any
+    error: ErrorInfo | None
+    latency_ms: int
+    model: str | None
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    metadata: dict[str, Any]
+    started_at: datetime
+    ended_at: datetime | None
+```
+
+### `FeedbackData`
+
+```python
+class FeedbackData(BaseModel):
+    trace_id: UUID
+    label: Literal["good", "bad", "neutral"] | None
+    score: float | None
+    comment: str | None
+    metadata: dict[str, Any]
+```
+
+### `EventData`
+
+```python
+class EventData(BaseModel):
+    id: UUID
+    trace_id: UUID
+    span_id: UUID | None
+    level: Literal["debug", "info", "warn", "error"]
+    message: str
+    metadata: dict[str, Any]
+    timestamp: datetime
+```
+
+## Exceptions
+
+| Exception | Raised when |
+| --------- | ----------- |
+| `TruLayerError` | Base class for all SDK errors |
+| `AuthenticationError` | Invalid or revoked API key |
+| `RateLimitError` | Plan limit hit; trace dropped |
+| `ValidationError` | Trace/span payload failed validation |
+
+The SDK never raises these to your call site — they're logged and the trace is dropped. Subscribe via `trulayer.on_error(fn)` if you need to handle them yourself.

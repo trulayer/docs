@@ -1,0 +1,44 @@
+---
+title: "Sessions"
+description: "Group traces that belong to the same conversation or workflow."
+---
+
+A **session** groups multiple traces that belong to the same user conversation or workflow. A session is identified by a `session_id` string that you provide when starting a trace.
+
+## When to use a session
+
+- **Chat apps** — `session_id = conversation_id` so all messages in one conversation are grouped
+- **Agents** — `session_id = run_id` so every step of one agent run shows up together
+- **Workflows** — `session_id = workflow_instance_id` for multi-step background jobs
+
+Sessions are optional — if you don't pass `session_id`, each trace is standalone.
+
+## Example
+
+<CodeGroup>
+```python Python
+import trulayer
+
+with trulayer.trace("user_message", session_id=conversation_id) as trace:
+    trace.set_input({"message": user_message})
+    ...
+```
+
+```typescript TypeScript
+await tl.trace("user_message", async (trace) => {
+  trace.setInput({ message: userMessage });
+  ...
+}, { sessionId: conversationId });
+```
+</CodeGroup>
+
+## In the dashboard
+
+The **Sessions** view lists every conversation with total traces, total tokens, and a time range. Click one to see every trace in order — this is the "session replay" view. Each trace is expandable to reveal its spans, so you can debug multi-turn failures as a single unit.
+
+## Choosing a session ID
+
+- Must be a string, up to 256 characters
+- Stable across the lifetime of the conversation or workflow
+- Ideally has no PII — a UUID or hash of the user/conversation is fine
+- If you need to look up a session by external identifier, put that identifier in `metadata`, not in `session_id`

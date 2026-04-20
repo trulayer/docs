@@ -1,33 +1,129 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: "Introduction"
+description: "The TruLayer HTTP API — base URL, authentication, errors, versioning."
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+All TruLayer endpoints live under a single base URL and share one authentication scheme. The full endpoint list is auto-generated from our OpenAPI spec — use the sidebar to browse every route with request/response shapes and a live playground.
 
-## Welcome
+## Base URL
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
+```text
+https://api.trulayer.ai
+```
 
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+All endpoints below this base use the `/v1/` path prefix (e.g. `/v1/ingest`, `/v1/traces`).
 
 ## Authentication
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+Every request requires a bearer token in the `Authorization` header.
+
+```http
+Authorization: Bearer <token>
+```
+
+Two token types are accepted:
+
+| Client | Token | How to get it |
+| ------ | ----- | ------------- |
+| **SDKs / server code** | API key (`tl_...`) | Dashboard → Settings → API keys |
+| **Dashboard / browser** | Clerk session JWT | Managed automatically by the frontend — you do not construct these by hand |
+
+API keys are tenant-scoped. They have access to every project in your organisation and are long-lived until revoked. **Never embed them in client-side code** — always call the TruLayer API from your server, or use a short-lived Clerk session token from an authenticated browser.
+
+## Content type
+
+All request and response bodies are JSON unless otherwise noted:
+
+```http
+Content-Type: application/json
+```
+
+## Rate limits
+
+Rate limits are per tenant, enforced via a sliding window:
+
+| Endpoint family | Limit (Free) | Limit (Pro) |
+| --------------- | ------------ | ----------- |
+| `POST /v1/ingest`, `POST /v1/ingest/batch` | 50,000 traces / month | 1,000,000 / month |
+| `POST /v1/feedback`, `POST /v1/eval` | Scales with plan | Scales with plan |
+| `GET /v1/traces`, `GET /v1/metrics` | 60 rps | 600 rps |
+
+When a limit is exceeded you get HTTP **429**. Check the `X-RateLimit-*` headers on every response for the current window state. Enterprise plans have no hard limits.
+
+## Error format
+
+Errors always return a JSON body of this shape:
 
 ```json
-"security": [
-  {
-    "bearerAuth": []
+{
+  "error": {
+    "code": "trace_not_found",
+    "message": "Trace not found.",
+    "request_id": "req_01j..."
   }
-]
+}
 ```
+
+| Status | Meaning |
+| ------ | ------- |
+| `400` | Malformed request — body doesn't match schema |
+| `401` | Missing or invalid token |
+| `403` | Token valid but not authorised for this resource (e.g. wrong tenant) |
+| `404` | Resource not found |
+| `409` | Conflict — e.g. submitting a trace with an ID that already exists |
+| `422` | Validation error on a required field |
+| `429` | Rate-limited |
+| `5xx` | Server-side issue — safe to retry with exponential backoff |
+
+Always log the `request_id` — it's the fastest way for support to look up a failed request.
+
+## Versioning
+
+The current API version is **v1**. Backwards-incompatible changes are shipped as a new version path (`/v2/...`); v1 is supported for at least 12 months after v2 release.
+
+Additive changes (new fields, new optional parameters) may land on v1 without a version bump — client code should ignore unknown response fields.
+
+## SDKs
+
+For most apps, you should not hit these endpoints directly — the SDKs handle batching, retries, and serialisation for you.
+
+<CardGroup cols={2}>
+  <Card title="Python SDK" icon="python" href="/sdks/python/overview">
+    `pip install trulayer`
+  </Card>
+  <Card title="TypeScript SDK" icon="js" href="/sdks/typescript/overview">
+    `npm install @trulayer/sdk`
+  </Card>
+</CardGroup>
+
+## Making a raw request
+
+If you need to call the API from a language without an SDK, or for debugging:
+
+<CodeGroup>
+```bash curl
+curl https://api.trulayer.ai/v1/traces \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+```python Python (httpx)
+import os, httpx
+
+response = httpx.get(
+    "https://api.trulayer.ai/v1/traces",
+    headers={"Authorization": f"Bearer {os.environ['TRULAYER_API_KEY']}"},
+)
+response.raise_for_status()
+print(response.json())
+```
+
+```typescript TypeScript (fetch)
+const response = await fetch("https://api.trulayer.ai/v1/traces", {
+  headers: { Authorization: `Bearer ${process.env.TRULAYER_API_KEY}` },
+});
+if (!response.ok) throw new Error(`${response.status}`);
+console.log(await response.json());
+```
+</CodeGroup>
+
+Ready to explore? Pick an endpoint in the sidebar.

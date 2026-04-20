@@ -1,0 +1,67 @@
+---
+title: "TypeScript SDK"
+description: "The @trulayer/sdk npm package — coming soon in depth, usable today."
+---
+
+The TypeScript SDK (`@trulayer/sdk` on npm) has zero runtime dependencies and works in Node.js 18+, Vercel Edge, Cloudflare Workers, and Bun. A browser build is available but we recommend relaying through your server for API-key safety.
+
+## Install
+
+```bash
+npm install @trulayer/sdk
+# or
+pnpm add @trulayer/sdk
+```
+
+## Minimal usage
+
+```typescript
+import { TruLayer, instrumentOpenAI } from "@trulayer/sdk";
+import OpenAI from "openai";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "my-app",
+});
+
+const openai = instrumentOpenAI(new OpenAI(), tl);
+
+await tl.trace("answer_question", async (trace) => {
+  trace.setInput({ question });
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: question }],
+  });
+  trace.setOutput(response.choices[0].message.content);
+});
+
+await tl.flush();
+```
+
+## Full tutorial & reference — in progress
+
+The full TypeScript SDK walkthrough, configuration guide, and API reference are being written as part of [TRU-92](https://linear.app/omnimoda/issue/TRU-92). Until then, the [Python tutorial](/sdks/python/tutorial) is the most complete guide — the TypeScript SDK mirrors the Python API shape closely.
+
+<CardGroup cols={2}>
+  <Card title="README" icon="github" href="https://github.com/trulayer/client-typescript#readme">
+    Current usage docs in the SDK repo.
+  </Card>
+  <Card title="Python tutorial" icon="graduation-cap" href="/sdks/python/tutorial">
+    Mirrored API — mentally substitute `snake_case` → `camelCase` and context managers → async callbacks.
+  </Card>
+</CardGroup>
+
+## Runtime support
+
+| Runtime | Supported | Notes |
+| ------- | --------- | ----- |
+| Node.js 18+ | Yes | Uses native `fetch` |
+| Vercel Edge | Yes | |
+| Cloudflare Workers | Yes | |
+| Bun | Yes | |
+| Deno | Yes | Import from `npm:@trulayer/sdk` |
+| Browser | Yes (not recommended) | Exposes your API key — relay via your server instead |
+
+## Build output
+
+The package ships both ESM (`index.mjs`) and CJS (`index.js`) entry points, plus `.d.ts` types. Imports work identically in modern toolchains.

@@ -1,0 +1,57 @@
+---
+title: "Overview"
+description: "The TruLayer data model in one page."
+---
+
+TruLayer models an AI application as a hierarchy of **traces** (end-to-end units of work) made up of **spans** (individual steps), grouped optionally into **sessions** (user conversations). Everything else — evals, feedback, metrics — attaches to those traces.
+
+## The hierarchy
+
+```text
+Session
+ ├── Trace (one user request, one cron run, one agent step)
+ │    ├── Span (LLM call)
+ │    ├── Span (vector search)
+ │    ├── Span (tool call)
+ │    └── Span (another LLM call)
+ └── Trace (the next request in the same conversation)
+
+Attachments on any trace:
+ ├── Event       (discrete log within a trace)
+ ├── Feedback    (human label — thumbs up/down, score, comment)
+ └── Eval result (automated score — correctness, hallucination, etc.)
+```
+
+## Concepts
+
+<CardGroup cols={2}>
+  <Card title="Trace" icon="route" href="/concepts/traces-and-spans">
+    One end-to-end unit of work — typically one user request or one agent turn.
+  </Card>
+  <Card title="Span" icon="bars-staggered" href="/concepts/traces-and-spans">
+    A step within a trace — an LLM call, retrieval, tool call, or custom code block.
+  </Card>
+  <Card title="Session" icon="comments" href="/concepts/sessions">
+    A series of traces that belong to the same user conversation or workflow.
+  </Card>
+  <Card title="Eval" icon="flask" href="/concepts/evals">
+    An automated score for a trace — correctness, hallucination, safety, etc.
+  </Card>
+  <Card title="Feedback" icon="thumbs-up" href="/concepts/feedback">
+    A human label attached to a trace — thumbs up/down, score, comment.
+  </Card>
+  <Card title="Metric" icon="chart-line" href="/concepts/metrics">
+    An aggregated view across traces — error rate, p95 latency, cost.
+  </Card>
+</CardGroup>
+
+## How it all fits together
+
+You instrument your app with an SDK. Every LLM call, retrieval, or tool call becomes a **span** inside a **trace**. Traces are batched and shipped to the TruLayer ingest API. In the background:
+
+- **Evals** run against traces and produce scores (stored as eval results).
+- **Feedback** is attached to traces directly from your app or through the dashboard.
+- **Metrics** are computed on a rolling window and surfaced in the dashboard and via the API.
+- **Failures** are clustered and routed to alerting channels you configure.
+
+From the developer's side: all you need to do is instrument. The rest happens automatically.

@@ -1,0 +1,135 @@
+---
+title: "Traces and spans"
+description: "The core unit of observability in TruLayer."
+---
+
+A **trace** is one end-to-end unit of work — typically a single user request, a single agent turn, or one invocation of a background job. A trace is made up of one or more **spans**, each representing a step within that unit of work.
+
+## When to create a trace
+
+Create a new trace whenever a unit of work starts. Common trace boundaries:
+
+- One HTTP request to your app
+- One message from a user in a chat session
+- One iteration of an agent's reasoning loop
+- One cron run or queue-message handler
+
+A trace **should not** span multiple user requests. If a user sends three messages in a row, that's three traces, grouped into one **session**.
+
+## When to create a span
+
+Create a span for any discrete step inside a trace whose latency, input, output, or errors you want to see separately. Common span types:
+
+| Span type | What it captures |
+| --------- | ---------------- |
+| `llm` | A call to a language model — prompt, response, tokens, model name |
+| `retrieval` | A vector search or lookup — query, top-k results, latency |
+| `tool` | A tool/function call — arguments, return value |
+| `custom` | Any other code block — business logic, parsing, validation |
+
+Spans can be **nested** — an agent loop might have an outer `custom` span for the whole iteration, with `llm` and `tool` spans inside.
+
+## Example: manual instrumentation
+
+<CodeGroup>
+```python Python
+import trulayer
+
+trulayer.init(api_key="...", project="rag-app")
+
+with trulayer.trace("answer_question") as trace:
+    trace.set_input({"question": question})
+
+    with trace.span("retrieve", span_type="retrieval") as span:
+        docs = vector_store.search(question, k=5)
+        span.set_output({"doc_count": len(docs)})
+
+    with trace.span("generate", span_type="llm") as span:
+        span.set_model("gpt-4o-mini")
+        response = client.chat.completions.create(...)
+        span.set_output(response.choices[0].message.content)
+        span.set_tokens(
+            prompt_tokens=response.usage.prompt_tokens,
+            completion_tokens=response.usage.completion_tokens,
+        )
+
+    trace.set_output({"answer": response.choices[0].message.content})
+```
+
+```typescript TypeScript
+import { TruLayer } from "@trulayer/sdk";
+
+const tl = new TruLayer({ apiKey: "...", project: "rag-app" });
+
+await tl.trace("answer_question", async (trace) => {
+  trace.setInput({ question });
+
+  const docs = await trace.span("retrieve", "retrieval", async (span) => {
+    const results = await vectorStore.search(question, 5);
+    span.setOutput({ docCount: results.length });
+    return results;
+  });
+
+  const answer = await trace.span("generate", "llm", async (span) => {
+    span.setModel("gpt-4o-mini");
+    const response = await openai.chat.completions.create({ ... });
+    span.setOutput(response.choices[0].message.content);
+    span.setTokens({
+      promptTokens: response.usage.prompt_tokens,
+      completionTokens: response.usage.completion_tokens,
+    });
+    return response.choices[0].message.content;
+  });
+
+  trace.setOutput({ answer });
+});
+```
+</CodeGroup>
+
+## Example: auto-instrumentation
+
+For OpenAI, Anthropic, LangChain, and a growing list of frameworks, you don't need to wrap calls manually — one call to `instrument_*()` patches the provider client and every subsequent call becomes a span automatically.
+
+<CodeGroup>
+```python Python
+import trulayer
+from openai import OpenAI
+
+trulayer.init(api_key="...", project="rag-app")
+
+client = OpenAI()
+trulayer.instrument_openai(client)
+
+# Every client.chat.completions.create() call is now traced automatically.
+```
+
+```typescript TypeScript
+import { TruLayer, instrumentOpenAI } from "@trulayer/sdk";
+import OpenAI from "openai";
+
+const tl = new TruLayer({ apiKey: "...", project: "rag-app" });
+const openai = instrumentOpenAI(new OpenAI(), tl);
+// Every openai.chat.completions.create() call is now traced.
+```
+</CodeGroup>
+
+Auto-instrumented spans can be combined with manual ones — the SDK keeps track of the active trace via async-local context and nests them correctly.
+
+## What gets captured
+
+Every span captures:
+
+- **Input and output** — redacted via your `scrub_fn` if configured
+- **Latency** — wall-clock time from span start to end
+- **Model** — for `llm` spans, the model name
+- **Tokens** — prompt / completion / total for `llm` spans
+- **Error** — if the span raised an exception, the message and type
+- **Metadata** — any custom key-value pairs you attach
+
+See the [SDK reference](/sdks/python/reference) for every method.
+
+## Performance
+
+The SDK is non-blocking: spans are buffered in-process and flushed to the TruLayer ingest API in a background thread (Python) or via `queueMicrotask` (TypeScript). Your request path is never blocked on network I/O.
+
+Default batch size is 50 spans or 2 seconds, whichever comes first. Tune via [configuration](/sdks/python/configuration).

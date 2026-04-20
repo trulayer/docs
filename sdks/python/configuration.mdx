@@ -1,0 +1,98 @@
+---
+title: "Python SDK configuration"
+description: "Every option you can pass to trulayer.init()."
+---
+
+## Options
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `api_key` | `str` | required | Your TruLayer API key (`tl_...`) |
+| `project` | `str` | required | Project identifier — any string; created on first use |
+| `environment` | `str` | `"production"` | Free-form label; filter in the dashboard |
+| `endpoint` | `str` | `https://api.trulayer.ai` | Override for self-hosted or private deployments |
+| `batch_size` | `int` | `50` | Flush when this many spans are buffered |
+| `flush_interval` | `float` | `2.0` | Flush after this many seconds, whichever comes first |
+| `timeout` | `float` | `5.0` | HTTP request timeout in seconds |
+| `sample_rate` | `float` | `1.0` | Fraction of traces to send (0.0 – 1.0) |
+| `scrub_fn` | `Callable[[Any], Any] \| None` | `None` | Run every input/output through this function before ingest |
+| `metadata_validator` | `Callable[[dict], bool] \| None` | `None` | Return `False` to reject malformed metadata |
+| `debug` | `bool` | `False` | Log trace payloads locally instead of (or in addition to) sending |
+
+## Example — production
+
+```python
+import os
+import re
+import trulayer
+
+def scrub(value):
+    if isinstance(value, str):
+        # Emails
+        value = re.sub(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[email]", value, flags=re.I)
+        # Credit cards (loose)
+        value = re.sub(r"\b\d{13,16}\b", "[cc]", value)
+    return value
+
+trulayer.init(
+    api_key=os.environ["TRULAYER_API_KEY"],
+    project="prod",
+    environment="production",
+    sample_rate=1.0,              # keep at 1.0 unless ingest cost is an issue
+    batch_size=50,
+    flush_interval=2.0,
+    scrub_fn=scrub,
+)
+```
+
+## Example — local/offline
+
+For CI, local development without network to the TruLayer backend, or sandboxed tests:
+
+```python
+trulayer.init(
+    api_key="tl_local",
+    project="dev",
+    debug=True,         # log payloads to stdout instead of shipping
+)
+```
+
+Or point at a mock server:
+
+```python
+trulayer.init(
+    api_key="tl_local",
+    project="dev",
+    endpoint="http://localhost:4010",
+)
+```
+
+## Sampling
+
+`sample_rate=0.1` means 10% of traces are sent. Sampling is applied per trace (not per span), so a sampled trace always contains all of its spans.
+
+For deterministic sampling (same trace always in or out based on its ID), use the SDK's default hash-based sampler. For random sampling, pass a callable:
+
+```python
+import random
+trulayer.init(
+    api_key="...",
+    project="...",
+    sample_rate=lambda: random.random() < 0.1,
+)
+```
+
+## Flush control
+
+Manual flush (useful in tests):
+
+```python
+client = trulayer.get_client()
+client.flush()  # blocks until all buffered spans are shipped
+```
+
+Shutdown (wait for flush + stop background thread):
+
+```python
+trulayer.shutdown()
+```

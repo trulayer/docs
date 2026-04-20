@@ -1,0 +1,68 @@
+---
+title: "Evaluations"
+description: "Automated scoring of traces by an evaluator."
+---
+
+An **eval** is an automated judgement of a trace. TruLayer ships with a catalog of built-in evaluators (correctness, hallucination, toxicity, relevance) and also supports custom evaluators — LLM-based or rule-based — that you define.
+
+## Evaluator types
+
+| Type | How it works | When to use |
+| ---- | ------------ | ----------- |
+| `llm` | An LLM judges the trace against a rubric | Open-ended, nuanced metrics (correctness, tone) |
+| `rule` | Deterministic code runs against the trace | Fast, cheap, reliable for structured checks (regex match, JSON schema validity, latency bounds) |
+
+## Triggering an eval
+
+Evals can be triggered three ways:
+
+1. **Automatically on ingest** — configure evaluators to run on every trace matching a filter
+2. **On demand** via the API — `POST /v1/eval` with a `trace_id`
+3. **In bulk** from the dashboard — select a trace range and run an eval over them
+
+<CodeGroup>
+```python Python
+import trulayer
+
+client = trulayer.get_client()
+result = client.run_eval(
+    trace_id=trace_id,
+    evaluator_type="llm",
+    metric_name="correctness",
+)
+print(result.score, result.label, result.reasoning)
+```
+
+```typescript TypeScript
+const result = await tl.runEval({
+  traceId,
+  evaluatorType: "llm",
+  metricName: "correctness",
+});
+console.log(result.score, result.label, result.reasoning);
+```
+
+```bash curl
+curl https://api.trulayer.ai/v1/eval \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "trace_id": "01936f...",
+    "evaluator_type": "llm",
+    "metric_name": "correctness"
+  }'
+```
+</CodeGroup>
+
+## Result fields
+
+| Field | Type | Meaning |
+| ----- | ---- | ------- |
+| `score` | float | 0.0 to 1.0 for normalized metrics; otherwise metric-defined |
+| `label` | string | `pass` / `fail` / `warn`, or metric-defined |
+| `reasoning` | string | For LLM evals: the evaluator's explanation |
+| `evaluator_version` | string | The evaluator that produced this result |
+
+## Regression testing
+
+Evals over a **dataset** (a fixed set of traces) let you detect regressions between app versions. See the [Dashboard guide](https://app.trulayer.ai/evals) for running datasets.

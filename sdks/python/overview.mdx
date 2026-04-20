@@ -1,0 +1,64 @@
+---
+title: "Python SDK overview"
+description: "The trulayer Python package — install, authenticate, instrument."
+---
+
+The Python SDK (`trulayer` on PyPI) is the primary way to send traces to TruLayer from Python code. It supports manual tracing, auto-instrumentation of popular LLM clients, and async/sync usage patterns.
+
+## Install
+
+```bash
+pip install trulayer
+```
+
+Python 3.11+ required.
+
+## Minimal usage
+
+```python
+import os
+import trulayer
+
+trulayer.init(
+    api_key=os.environ["TRULAYER_API_KEY"],
+    project="my-app",
+)
+
+with trulayer.trace("do_work") as trace:
+    trace.set_input({"prompt": "hello"})
+    # ... your code ...
+    trace.set_output({"response": "world"})
+```
+
+## What's included
+
+| Import | Purpose |
+| ------ | ------- |
+| `trulayer.init(...)` | Initialise the global client |
+| `trulayer.trace(name)` | Context manager for a trace |
+| `trulayer.atrace(name)` | Async variant |
+| `trulayer.current_trace()` | Get the active trace from async-local context |
+| `trulayer.instrument_openai(client)` | Auto-patch an OpenAI client |
+| `trulayer.instrument_anthropic(client)` | Auto-patch an Anthropic client |
+| `trulayer.instrument_langchain()` | Register a LangChain callback handler |
+| `trulayer.TruLayerClient` | Class for explicit multi-instance use |
+| `trulayer.TraceData`, `SpanData`, `EventData`, `FeedbackData` | Pydantic models |
+
+Full signatures: [Reference](/sdks/python/reference).
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Tutorial" icon="graduation-cap" href="/sdks/python/tutorial">
+    Step-by-step: manual tracing → auto-instrumentation → async → feedback → production.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/sdks/python/configuration">
+    Batch size, flush interval, sampling, PII scrubbing, debug mode.
+  </Card>
+  <Card title="Reference" icon="book" href="/sdks/python/reference">
+    Every public export, with signatures and examples.
+  </Card>
+  <Card title="Concepts" icon="diagram-project" href="/concepts/overview">
+    Understand the data model before going deep.
+  </Card>
+</CardGroup>
