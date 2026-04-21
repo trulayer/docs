@@ -50,6 +50,12 @@
             ]
           },
           {
+            "group": "SDK features",
+            "pages": [
+              "sdks/redaction"
+            ]
+          },
+          {
             "group": "Dashboard",
             "pages": [
               "dashboard/overview",
@@ -63,7 +69,10 @@
             "pages": [
               "integrations/overview",
               "integrations/openai",
-              "integrations/anthropic"
+              "integrations/anthropic",
+              "integrations/langchain",
+              "integrations/llamaindex",
+              "integrations/pydanticai"
             ]
           },
           {

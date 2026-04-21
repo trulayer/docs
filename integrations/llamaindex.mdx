@@ -1,0 +1,75 @@
+---
+title: "LlamaIndex"
+description: "Trace LlamaIndex query engines, agents, and retrievers with one function."
+---
+
+## Install
+
+<CodeGroup>
+```bash Python
+pip install trulayer llama-index
+```
+
+```bash TypeScript
+npm install @trulayer/sdk llamaindex
+```
+</CodeGroup>
+
+## Instrument
+
+<CodeGroup>
+```python Python
+import os
+import trulayer
+
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project="my-app")
+trulayer.instrument_llamaindex()
+```
+
+```typescript TypeScript
+import { TruLayer, instrumentLlamaindex } from "@trulayer/sdk";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "my-app",
+});
+
+instrumentLlamaindex(tl);
+```
+</CodeGroup>
+
+After instrumentation every query, retriever, LLM call, and agent step is captured as a span — no per-callsite changes needed.
+
+## Minimal example
+
+<CodeGroup>
+```python Python
+from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+
+docs = SimpleDirectoryReader("./data").load_data()
+index = VectorStoreIndex.from_documents(docs)
+engine = index.as_query_engine()
+
+engine.query("What does the onboarding doc say about SSO?")
+# A trace appears in the dashboard with `query`, `retriever`, and `llm` spans.
+```
+
+```typescript TypeScript
+import { Document, VectorStoreIndex } from "llamaindex";
+
+const docs = [new Document({ text: "..." })];
+const index = await VectorStoreIndex.fromDocuments(docs);
+const engine = index.asQueryEngine();
+
+await engine.query({ query: "What does the onboarding doc say about SSO?" });
+```
+</CodeGroup>
+
+## What gets captured
+
+- `query` spans for every `QueryEngine.query` / `ChatEngine.chat`
+- `retriever` spans with the retrieved `NodeWithScore` list attached as output
+- `llm` spans for synthesizer calls with prompt, response, and token counts
+- `agent` spans for ReAct and OpenAI agents, with each reasoning step as a child span
+
+Embeddings calls used for both indexing and retrieval appear as `embedding` spans with input text and model metadata.

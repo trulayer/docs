@@ -1,0 +1,74 @@
+---
+title: "PydanticAI"
+description: "Trace every PydanticAI agent run with one function."
+---
+
+## Install
+
+<CodeGroup>
+```bash Python
+pip install trulayer pydantic-ai
+```
+
+```bash TypeScript
+npm install @trulayer/sdk pydantic-ai
+```
+</CodeGroup>
+
+## Instrument
+
+<CodeGroup>
+```python Python
+import os
+import trulayer
+
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project="my-app")
+trulayer.instrument_pydanticai()
+```
+
+```typescript TypeScript
+import { TruLayer, instrumentPydanticai } from "@trulayer/sdk";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "my-app",
+});
+
+instrumentPydanticai(tl);
+```
+</CodeGroup>
+
+After instrumentation every `Agent.run` / `Agent.run_sync` call and every tool invocation is captured — no per-callsite changes needed.
+
+## Minimal example
+
+<CodeGroup>
+```python Python
+from pydantic_ai import Agent
+
+agent = Agent("openai:gpt-4o-mini", system_prompt="You are a concise assistant.")
+
+result = agent.run_sync("What is the capital of France?")
+print(result.output)
+# A trace appears in the dashboard with one `agent` span and one `llm` child.
+```
+
+```typescript TypeScript
+import { Agent } from "pydantic-ai";
+
+const agent = new Agent({
+  model: "openai:gpt-4o-mini",
+  systemPrompt: "You are a concise assistant.",
+});
+
+const result = await agent.run("What is the capital of France?");
+console.log(result.output);
+```
+</CodeGroup>
+
+## What gets captured
+
+- `agent` spans for every `run` / `run_sync` / `run_stream` call with the user prompt, system prompt, and final structured output
+- `llm` spans for each underlying model call, including token counts and any tool-call requests from the model
+- `tool` spans for each `@agent.tool` invocation with validated arguments and return value
+- Validation errors from Pydantic are captured on the span as errors so you can filter failed runs in the dashboard
