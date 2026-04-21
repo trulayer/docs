@@ -3,7 +3,17 @@ title: "Evaluations"
 description: "Automated scoring of traces by an evaluator."
 ---
 
-An **eval** is an automated judgement of a trace. TruLayer ships with a catalog of built-in evaluators (correctness, hallucination, toxicity, relevance) and also supports custom evaluators — LLM-based or rule-based — that you define.
+An **eval** is an automated judgement of a trace. TruLayer ships with 15 built-in evaluators across four tag categories, and also supports custom evaluators — LLM-based or rule-based — that you define.
+
+## Built-in catalog
+
+| Category | Evaluators |
+| -------- | ---------- |
+| `quality` | `faithfulness`, `answer_relevance`, `groundedness`, `retrieval_precision`, `retrieval_recall`, `citation_correctness`, `refusal_appropriateness` |
+| `safety` | `toxicity`, `pii_leakage`, `hallucination`, `jailbreak`, `prompt_injection`, `factual_accuracy` |
+| `format` | `function_call_correctness`, `json_schema_conformance` |
+
+All 15 are browsable — with rubrics, defaults, and sample outputs — at [`/evals/catalog`](https://app.trulayer.ai/evals/catalog) in the dashboard.
 
 ## Evaluator types
 

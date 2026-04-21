@@ -1,0 +1,114 @@
+---
+title: "Redaction"
+description: "Scrub PII, secrets, and PHI before data leaves your network."
+---
+
+The `trulayer.redact` (Python) and `@trulayer/sdk/redact` (TypeScript) modules scrub sensitive data from span inputs, outputs, and metadata **before** anything is transmitted to TruLayer. Redaction runs client-side, inside your process — no raw PII, secrets, or PHI ever reaches our servers.
+
+## Built-in packs
+
+Enable one or more packs to get curated detectors for common sensitive data classes:
+
+| Pack | Covers |
+| ---- | ------ |
+| `standard` | Email addresses, phone numbers, US SSNs, bearer tokens, JWTs |
+| `strict` | Everything in `standard`, plus IPv4 addresses, credit card numbers, IBANs |
+| `phi` | US medical record numbers (MRN), ICD-10 codes, dates of birth |
+| `finance` | SWIFT/BIC codes, US bank routing numbers |
+| `secrets` | AWS access keys, GCP service account JSON, PEM private keys, GitHub personal access tokens |
+
+Packs compose — list as many as you need. Detected matches are replaced with typed sentinels like `<REDACTED:email>` so the shape of your data is preserved for debugging.
+
+## Getting started
+
+<CodeGroup>
+```python Python
+from trulayer.redact import Redactor, Rule
+import trulayer
+
+r = Redactor(
+    packs=["standard", "secrets"],
+    rules=[
+        Rule(name="employee_id", pattern=r"EMP-\d{6}", replacement="<REDACTED:employee_id>"),
+    ],
+)
+
+trulayer.init(api_key="...", project="my-app", redactor=r)
+# All auto-instrumented spans are now scrubbed before leaving your network.
+```
+
+```typescript TypeScript
+import { TruLayer } from "@trulayer/sdk";
+import { Redactor } from "@trulayer/sdk/redact";
+
+const redactor = new Redactor({
+  packs: ["standard", "secrets"],
+  rules: [{ name: "employee_id", pattern: /EMP-\d{6}/g, replacement: "<REDACTED:employee_id>" }],
+});
+
+const tl = new TruLayer({ apiKey: process.env.TRULAYER_API_KEY!, project: "my-app", redactor });
+```
+</CodeGroup>
+
+Once the `Redactor` is attached at `init`, every span produced by auto-instrumentation or manual tracing is scrubbed on the way out.
+
+## Custom rules
+
+Use the `rules` argument to add regex-based detectors for domain-specific identifiers (employee IDs, internal customer numbers, ticket IDs, etc.). Each rule needs a `name`, a `pattern`, and a `replacement` sentinel.
+
+- **Python:** `pattern` is a string (compiled with `re`).
+- **TypeScript:** `pattern` is a `RegExp`. Use the `g` flag to replace all occurrences.
+
+## Pseudonymization
+
+If you need to correlate traces across runs — for example, to see that the same (unknown) user hit the same bug twice — enable pseudonymization. Matches are replaced with a stable HMAC-SHA256 hash instead of a static sentinel, so identical inputs produce identical tokens.
+
+<CodeGroup>
+```python Python
+r = Redactor(
+    packs=["standard"],
+    pseudonymize=True,
+    salt=os.environ["TRULAYER_REDACT_SALT"],
+)
+```
+
+```typescript TypeScript
+const redactor = new Redactor({
+  packs: ["standard"],
+  pseudonymize: true,
+  salt: process.env.TRULAYER_REDACT_SALT!,
+});
+```
+</CodeGroup>
+
+Keep the salt secret and stable. Rotating it breaks correlation; leaking it enables offline brute-forcing of low-entropy values (e.g. phone numbers).
+
+## Manual span scrubbing
+
+For spans you construct by hand, call the redactor directly on the fields you want cleaned:
+
+<CodeGroup>
+```python Python
+from trulayer.redact import redact_span
+
+with trulayer.current_trace().span("lookup_user") as span:
+    span.set_input({"email": "alice@example.com"})
+    span.set_output({"records": [...]})
+    redact_span(span, fields=["input", "output"])
+```
+
+```typescript TypeScript
+import { redactSpan } from "@trulayer/sdk/redact";
+
+const span = tl.currentTrace().span("lookup_user");
+span.setInput({ email: "alice@example.com" });
+span.setOutput({ records: [/* ... */] });
+redactSpan(span, ["input", "output"]);
+```
+</CodeGroup>
+
+`redact_span` / `redactSpan` uses the same packs and rules configured on the active `Redactor`.
+
+## Where redaction runs
+
+Redaction executes **inside your process**, before spans are serialized and sent to TruLayer. Nothing reaches TruLayer's servers before it has been scrubbed — the raw values never leave your perimeter. If the SDK is unable to connect to TruLayer, the redacted payloads are what land in the local buffer as well.

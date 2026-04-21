@@ -1,0 +1,75 @@
+---
+title: "LangChain"
+description: "Trace every LangChain chain, agent, and tool call with one function."
+---
+
+## Install
+
+<CodeGroup>
+```bash Python
+pip install trulayer langchain
+```
+
+```bash TypeScript
+npm install @trulayer/sdk langchain
+```
+</CodeGroup>
+
+## Instrument
+
+<CodeGroup>
+```python Python
+import os
+import trulayer
+
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project="my-app")
+trulayer.instrument_langchain()
+```
+
+```typescript TypeScript
+import { TruLayer, instrumentLangchain } from "@trulayer/sdk";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "my-app",
+});
+
+instrumentLangchain(tl);
+```
+</CodeGroup>
+
+After instrumentation every chain, agent, LLM call, and tool invocation is captured as a span in the current trace — no per-callsite code changes required.
+
+## Minimal example
+
+<CodeGroup>
+```python Python
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+
+prompt = ChatPromptTemplate.from_messages([("user", "{question}")])
+chain = prompt | ChatOpenAI(model="gpt-4o-mini")
+
+chain.invoke({"question": "What is the capital of France?"})
+# A trace appears in the dashboard with one `chain` span and one `llm` child.
+```
+
+```typescript TypeScript
+import { ChatOpenAI } from "@langchain/openai";
+import { ChatPromptTemplate } from "@langchain/core/prompts";
+
+const prompt = ChatPromptTemplate.fromMessages([["user", "{question}"]]);
+const chain = prompt.pipe(new ChatOpenAI({ model: "gpt-4o-mini" }));
+
+await chain.invoke({ question: "What is the capital of France?" });
+```
+</CodeGroup>
+
+## What gets captured
+
+- `chain` spans for every `Runnable` — `invoke`, `batch`, `stream`
+- `llm` spans for every model call (OpenAI, Anthropic, Bedrock, etc.) with inputs, outputs, and token counts
+- `tool` spans for every `@tool` / `StructuredTool` invocation with arguments and return value
+- `retriever` spans for vector-store queries with the retrieved documents attached as output
+
+Nested runnables produce a nested span tree, so the dashboard waterfall mirrors the shape of your chain.
