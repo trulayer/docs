@@ -1,0 +1,56 @@
+---
+title: "Settings — Usage"
+description: "Track spans, evaluations, seats, and retention against your plan."
+---
+
+**Settings → Usage** shows real-time consumption against your plan limits for the current billing period.
+
+![screenshot: Usage dashboard with plan progress bars](../images/dashboard-settings-usage.png)
+
+## Metered resources
+
+| Resource | What it counts | Reset cadence |
+| -------- | -------------- | ------------- |
+| Spans | Every span ingested across all projects (LLM, chain, tool, retriever, custom) | Monthly, on plan anniversary |
+| Evaluations | LLM-as-judge and rule-based eval results produced, both ad-hoc and scheduled | Monthly |
+| Seats | Active team members (role ≠ `viewer` counts toward the seat cap) | Always current |
+| Retention | Oldest trace you can query, expressed in days | Always current |
+
+Each card shows current value, plan limit, and a progress bar. Clicking a card drills into a daily breakdown for the current period.
+
+## Plan limits
+
+Current defaults (confirm against [trulayer.ai/pricing](https://trulayer.ai/pricing) for the latest):
+
+| Plan | Spans / month | Evals / month | Seats | Retention |
+| ---- | ------------- | ------------- | ----- | --------- |
+| Starter | 500,000 | 5,000 | 3 | 14 days |
+| Pro | 5,000,000 | 100,000 | 15 | 60 days |
+| Team | 25,000,000 | 500,000 | 50 | 180 days |
+| Enterprise | Custom | Custom | Custom | Up to 400 days |
+
+## Overage behaviour
+
+- **Starter** — hard block. Once you hit the monthly span cap, ingestion returns HTTP `429` with `error.code = "plan_limit_exceeded"` until reset or upgrade.
+- **Pro** / **Team** — metered overage. Ingestion continues; the overage is billed at the per-span rate shown at the top of the Usage page. A banner on the dashboard warns at 80% and 100% of the included allowance.
+- **Enterprise** — per-contract; speak to your account manager.
+
+Evals overage follows the same pattern. Seat overage is always hard-blocked — inviting beyond the seat cap prompts an upgrade.
+
+## Data retention
+
+Traces older than your plan's retention window are permanently deleted nightly (rolling). Shortly before deletion:
+
+- Exports you need must be taken ahead of time — use the [API](/api-reference/introduction) `/v1/exports`.
+- Datasets created from old traces are preserved — only the raw trace storage is pruned.
+
+Enterprise plans can request a retention override per project; see [Team settings](./settings-team) to contact your account manager.
+
+## Programmatic access
+
+```bash
+curl https://api.trulayer.ai/v1/usage \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+Returns the same data shown on the Usage page (current period, limits, overage). Handy for internal dashboards and alerts.

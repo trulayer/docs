@@ -1,0 +1,46 @@
+---
+title: "AutoGen"
+description: "Trace every AutoGen ConversableAgent chat and reply."
+---
+
+## Install
+
+```bash
+pip install trulayer pyautogen
+```
+
+## Instrument
+
+`instrument_autogen` wraps a single `ConversableAgent` (or subclass — `AssistantAgent`, `UserProxyAgent`). Call it per agent you want traced.
+
+```python
+import os
+import trulayer
+from autogen import AssistantAgent, UserProxyAgent
+from trulayer.instruments.autogen import instrument_autogen
+
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project_name="my-app")
+
+assistant = AssistantAgent(
+    name="assistant",
+    llm_config={"model": "gpt-4o-mini"},
+)
+user = UserProxyAgent(name="user", human_input_mode="NEVER", max_consecutive_auto_reply=1)
+
+with trulayer.trace("autogen-chat") as trace:
+    instrument_autogen(assistant, trace)
+    instrument_autogen(user, trace)
+    user.initiate_chat(assistant, message="What is the capital of France?")
+```
+
+## What gets captured
+
+- An `agent` span around every `initiate_chat()` call, with the initiating message as input and the final message history as output.
+- One child span per `generate_reply()` call — captures the sender, the message being replied to, and the generated reply.
+- LLM calls nested under replies appear as `llm` spans when you also instrument the underlying provider.
+
+## Known gotchas
+
+- **Instrument every agent in the conversation.** `initiate_chat` on agent A triggers `generate_reply` on agent B; both need to be instrumented to get a complete waterfall.
+- **`human_input_mode="ALWAYS"`** — when a human is in the loop, the wait for stdin is captured as span duration. Expect long-lived spans; set alerting thresholds accordingly.
+- **GroupChat.** Spans are recorded per agent, not per group. To get a single trace per group run, initiate the chat inside one `trulayer.trace(...)` block and instrument every member.

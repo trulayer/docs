@@ -56,6 +56,14 @@ Nested spans appear indented under their parent. Failed spans are highlighted re
 
 The tab in the top-right shows the full trace payload as JSON — useful for debugging the SDK itself or replaying elsewhere.
 
+### Session replay
+
+If the trace has a `session_id`, a **Replay session** button in the header opens the session view — every trace emitted under that session, ordered by timestamp, with the conversation reconstructed on the left and the span waterfall for the selected trace on the right. Great for "what was the user doing when it broke?"
+
+### Add to dataset
+
+The toolbar's **Add to dataset** action pushes the trace into any existing eval dataset (or creates a new one) with one click. The trace's inputs and outputs become the dataset row; if the trace already has feedback or eval results, those become the expected outputs. See [Evals → Datasets](./evals) for how to run evaluators against the dataset.
+
 ## Keyboard
 
 | Key | Action |

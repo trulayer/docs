@@ -1,0 +1,48 @@
+---
+title: "CrewAI"
+description: "Trace every CrewAI crew kickoff, agent task, and tool call."
+---
+
+## Install
+
+```bash
+pip install trulayer crewai
+```
+
+## Instrument
+
+`instrument_crewai` wraps a single `Crew` instance. Call it once per crew — after construction, before `kickoff()`.
+
+```python
+import os
+import trulayer
+from crewai import Agent, Crew, Task
+from trulayer.instruments.crewai import instrument_crewai
+
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project_name="my-app")
+
+researcher = Agent(
+    role="Researcher",
+    goal="Find the capital of France.",
+    backstory="You are a methodical researcher.",
+)
+task = Task(description="Answer the user's question.", agent=researcher, expected_output="A one-line answer.")
+crew = Crew(agents=[researcher], tasks=[task])
+
+with trulayer.trace("crew-run") as trace:
+    instrument_crewai(crew, trace)
+    result = crew.kickoff(inputs={"question": "What is the capital of France?"})
+```
+
+## What gets captured
+
+- A `crew` root span around every `kickoff()` call, with the `inputs` as span input and the final crew result as output.
+- One `agent` child span per agent task execution, nested under the crew span.
+- `tool` spans for any `@tool`-decorated functions invoked by an agent.
+- LLM calls inside agents produce `llm` spans when the underlying provider (OpenAI, Anthropic, etc.) is also instrumented — combine with `instrument_openai` / `instrument_anthropic`.
+
+## Known gotchas
+
+- **One crew, one call.** Each `instrument_crewai` call binds to a specific `Crew` instance. Re-instrumenting the same crew is a no-op; instantiating a new crew requires a new call.
+- **Trace context is required.** Unlike `instrument_openai`, this function needs an active `TraceContext` passed in — call it inside a `with trulayer.trace(...)` block or pass an explicit trace.
+- **Parallel tasks.** When `Crew(process="hierarchical")` runs tasks in parallel, span parent-child order still reflects the logical task graph (not wall-clock nesting).

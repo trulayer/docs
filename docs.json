@@ -62,7 +62,19 @@
               "dashboard/traces",
               "dashboard/ingestion-health",
               "dashboard/evals",
-              "dashboard/metrics"
+              "dashboard/metrics",
+              "dashboard/feedback",
+              "dashboard/failures",
+              "dashboard/control",
+              {
+                "group": "Settings",
+                "pages": [
+                  "dashboard/settings-api-keys",
+                  "dashboard/settings-usage",
+                  "dashboard/settings-billing",
+                  "dashboard/settings-team"
+                ]
+              }
             ]
           },
           {
@@ -71,9 +83,15 @@
               "integrations/overview",
               "integrations/openai",
               "integrations/anthropic",
+              "integrations/vercel-ai-sdk",
               "integrations/langchain",
               "integrations/llamaindex",
-              "integrations/pydanticai"
+              "integrations/pydanticai",
+              "integrations/crewai",
+              "integrations/mastra",
+              "integrations/dspy",
+              "integrations/haystack",
+              "integrations/autogen"
             ]
           },
           {

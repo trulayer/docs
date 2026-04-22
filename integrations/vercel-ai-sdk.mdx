@@ -1,12 +1,84 @@
 ---
 title: "Vercel AI SDK"
-description: "Use TruLayer with the Vercel AI SDK for streaming and tool-calling."
+description: "Trace every streamText, generateText, and generateObject call."
 ---
 
-<Note>
-This page is a placeholder. Detailed integration documentation for the Vercel AI SDK is coming soon.
-</Note>
+## Install
 
-The TruLayer TypeScript SDK works alongside the [Vercel AI SDK](https://sdk.vercel.ai) for streaming responses and tool-calling agents. Wrap your `streamText` or `generateText` calls in a TruLayer trace to capture prompts, completions, token usage, and tool invocations automatically.
+```bash
+npm install @trulayer/sdk ai
+```
 
-See the [TypeScript SDK tutorial](/sdks/typescript/tutorial) for the current integration pattern.
+## Instrument
+
+`instrumentVercelAI` takes the `ai` module's functions and returns instrumented replacements. Import it once at the top of any module that uses the Vercel AI SDK.
+
+```typescript
+import { generateText, streamText, generateObject } from "ai";
+import { TruLayer, instrumentVercelAI } from "@trulayer/sdk";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "my-app",
+});
+
+const ai = instrumentVercelAI(tl, { generateText, streamText, generateObject });
+
+// Use ai.generateText / ai.streamText / ai.generateObject from here on.
+```
+
+## Minimal example — `streamText` in a Next.js Route Handler
+
+```typescript app/api/chat/route.ts
+import { openai } from "@ai-sdk/openai";
+import { TruLayer, instrumentVercelAI } from "@trulayer/sdk";
+import { streamText } from "ai";
+
+export const runtime = "nodejs"; // required — edge runtime is not supported
+
+const tl = new TruLayer({ apiKey: process.env.TRULAYER_API_KEY!, project: "chat" });
+const ai = instrumentVercelAI(tl, { streamText });
+
+export async function POST(req: Request) {
+  const { messages } = await req.json();
+  const result = await ai.streamText({
+    model: openai("gpt-4o-mini"),
+    messages,
+  });
+  return result.toDataStreamResponse();
+}
+```
+
+## `generateObject` with a Zod schema
+
+```typescript
+import { anthropic } from "@ai-sdk/anthropic";
+import { z } from "zod";
+
+const { object } = await ai.generateObject({
+  model: anthropic("claude-sonnet-4-6"),
+  schema: z.object({
+    sentiment: z.enum(["positive", "neutral", "negative"]),
+    reasoning: z.string(),
+  }),
+  prompt: "Classify: 'The onboarding was great but docs were sparse.'",
+});
+```
+
+The span captures the structured `object` as output and any validation error as `span.status = error`.
+
+## What gets captured
+
+- `llm` spans around every wrapped call with:
+  - `input` — the last message (or prompt string)
+  - `output` — completed text, or the structured object for `generateObject`
+  - `model` — the model id (for example `gpt-4o-mini`)
+  - `prompt_tokens` / `completion_tokens`
+  - `latency_ms`
+- Stream results hold the span open until the final token arrives; `usage` is recorded from the resolved `result.usage` promise.
+
+## Known gotchas
+
+- **Next.js Edge runtime is unsupported.** Add `export const runtime = "nodejs"` to any Route Handler or Server Action that calls an instrumented function. The SDK relies on `node:async_hooks` for trace context propagation, which is not available on Edge.
+- **Only wrapped functions are traced.** If you import `generateText` directly from `ai` elsewhere in your code, those calls bypass TruLayer. Pick one convention per module.
+- **Tool calls are recorded on the parent `llm` span.** For a dedicated `tool` span per tool execution, wrap the tool body with `tl.span("tool:name", { spanType: "tool" })`.

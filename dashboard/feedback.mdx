@@ -1,10 +1,73 @@
 ---
 title: "Feedback"
-description: "Human labels on traces — review, export, build datasets."
+description: "Capture, review, and triage end-user feedback on every trace."
 ---
 
-<Note>
-This page is a placeholder. Detailed documentation for the Feedback dashboard is coming soon.
-</Note>
+The **Feedback** page is where end-user reactions to your product — thumbs up / down, free-text notes, inline edits — surface next to the traces that produced them. See the [Feedback concept](/concepts/feedback) for the underlying data model.
 
-The **Feedback** page is where you review human labels on traces, export labelled datasets for eval runs, and track agreement between labellers. See the [Feedback concept](/concepts/feedback) for the underlying data model.
+![screenshot: Feedback inbox list](../images/dashboard-feedback-list.png)
+
+## How feedback is captured
+
+Feedback is attached to a trace via the SDK or a direct API call.
+
+<CodeGroup>
+```python Python
+trulayer.get_client().feedback(
+    trace_id=result.trace_id,
+    label="bad",             # "good" | "bad" | free-form string
+    comment="Wrong answer — the capital is Paris, not Lyon.",
+    user_id="u_42",
+)
+```
+
+```typescript TypeScript
+tl.feedback(traceId, "bad", {
+  comment: "Wrong answer — the capital is Paris, not Lyon.",
+  userId: "u_42",
+});
+```
+</CodeGroup>
+
+Typical UI patterns:
+
+- **Thumbs-up / thumbs-down** buttons under every assistant message → `label = "good" | "bad"`.
+- **Free-text follow-up** after a negative click → `comment`.
+- **Inline edit** — user corrects the response → send the edited text as `comment` with `label = "edit"`.
+
+The SDK returns the trace id from every `trace()` block — plumb it through your response payload so the client can reference it when feedback arrives.
+
+## Reviewing feedback
+
+The feedback inbox lists every feedback event, newest first. Columns:
+
+- **Timestamp**
+- **Trace** — click to open the trace detail view
+- **Label** — color-coded (`good` green, `bad` red, custom labels neutral)
+- **Comment** — truncated; hover to see the full text
+- **User** — `user_id` if provided, linked to the user timeline view
+- **Session** — linked to the session replay
+
+![screenshot: Feedback detail with linked trace](../images/dashboard-feedback-detail.png)
+
+## Filters
+
+- **Label** — narrow to `bad`, `edit`, or any custom label.
+- **Project / environment / model** — inherited from the trace.
+- **Has comment** — show only feedback with free-text context.
+- **User** — one user's entire feedback history.
+- **Time range**.
+
+## Linking feedback to traces
+
+Every feedback row has a **View trace** button that opens the span waterfall with the feedback pinned to the header. From there you can:
+
+- Copy the trace id for a bug report.
+- Add the trace to a dataset for an eval regression run (**Add to dataset** from the trace detail toolbar).
+- Jump to the [Evals](./evals) page to run a correctness evaluator against the trace and compare the score to the user's label.
+
+## Common workflows
+
+- **Weekly quality review.** Filter `label = bad AND has_comment = true` over the last 7 days, triage top 20, push each into the correctness dataset.
+- **Regression signal.** When bad-feedback rate spikes (see the [Metrics](./metrics) page), filter feedback by the new time window to find the root issue.
+- **User outreach.** Group by `user_id` to find users with repeated bad feedback — prime candidates for a qualitative follow-up.

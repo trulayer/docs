@@ -1,0 +1,59 @@
+---
+title: "Settings — Team"
+description: "Invite members, manage roles, and configure SSO."
+---
+
+**Settings → Team** lists every member of your TruLayer workspace, their role, and their status.
+
+![screenshot: Team members list](../images/dashboard-settings-team.png)
+
+## Roles
+
+| Role | Can do | Cannot do |
+| ---- | ------ | --------- |
+| `owner` | Everything — billing, team changes, policy enforcement, kill-switch. | (no restriction) |
+| `operator` | Manage control policies, approve/reject HITL items, manage alert rules. | Change billing or team. |
+| `member` | Create and edit traces, evals, datasets, and API keys. Read everything. | Manage policies, billing, team. |
+| `auditor` | Read every resource including audit logs and evidence spans. Export data. | Write or delete anything. |
+| `viewer` | Read traces, evals, metrics, feedback. | Write anything. Does not count toward the paid seat cap on Starter/Pro plans. |
+
+Roles are checked server-side on every API request — you cannot escalate by tampering with the client.
+
+## Inviting a member
+
+Only `owner` can invite.
+
+1. **Settings → Team → Invite member**.
+2. Enter email address and pick a role.
+3. Click **Send invite**. The invitee receives an email with a sign-up link scoped to your workspace (handled by Clerk).
+4. The row appears in the list with status **Pending** until the invitee accepts.
+
+Pending invites expire after 7 days — re-invite to issue a fresh link.
+
+## Changing a role
+
+Open the member row, pick a new role from the dropdown, confirm. The change takes effect on the member's next API request (≤ 5 seconds). The old and new role are logged in the audit trail.
+
+## Suspending and reactivating
+
+Suspend a member from the row menu — they lose access immediately without being removed from the workspace. Reactivate to restore previous role. Use suspend for departing employees pending full offboarding; remove only after data-access review.
+
+## SAML SSO (Enterprise)
+
+SAML SSO is configured through Clerk, not the TruLayer dashboard. The setup flow:
+
+1. Contact sales@trulayer.ai to enable SSO on your workspace.
+2. You receive a Clerk organisation invite with admin rights.
+3. In the Clerk dashboard, configure your IdP (Okta, Google Workspace, Azure AD, OneLogin) and upload the IdP metadata.
+4. Add your corporate email domain; Clerk enforces SSO for all sign-ins on that domain.
+5. Existing email/password members are migrated to SSO on their next login — role assignments are preserved.
+
+Once SSO is active:
+
+- Self-serve invites are disabled for the SSO domain — members provision automatically on first login.
+- Role is still assigned inside TruLayer (defaults to `member`; owners can promote).
+- SCIM provisioning is available on request for automatic deprovisioning.
+
+## Audit log
+
+Every invite, role change, suspension, and SSO configuration event is recorded in the audit log available to `auditor` and `owner` roles. Export via the dashboard or `GET /v1/audit`.

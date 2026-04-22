@@ -1,0 +1,84 @@
+---
+title: "Mastra"
+description: "Trace Mastra agents, workflows, and tools with the TruLayer TypeScript SDK."
+---
+
+<Note>
+Mastra does not have a dedicated auto-instrument yet. Until it lands, use the TruLayer TypeScript SDK's generic `trace` / `span` API — the pattern below covers every Mastra primitive.
+</Note>
+
+## Install
+
+```bash
+npm install @trulayer/sdk @mastra/core
+```
+
+## Instrument an agent run
+
+Wrap each `agent.generate()` or `agent.stream()` call in a trace. If you also call the Vercel AI SDK or OpenAI SDK from within tools, stack the corresponding TruLayer instrumentations so nested spans show up in the waterfall.
+
+```typescript
+import { TruLayer, instrumentVercelAI } from "@trulayer/sdk";
+import { Mastra } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { openai } from "@ai-sdk/openai";
+import { generateText } from "ai";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  project: "my-app",
+});
+
+// If your Mastra tools call the Vercel AI SDK directly, instrument it too.
+const ai = instrumentVercelAI(tl, { generateText });
+
+const agent = new Agent({
+  name: "support",
+  instructions: "You are a concise support agent.",
+  model: openai("gpt-4o-mini"),
+});
+
+const mastra = new Mastra({ agents: { agent } });
+
+await tl.trace("support-agent", async (trace) => {
+  const result = await trace.span("agent:support", async (span) => {
+    span.setInput({ question: "Where is my order?" });
+    const res = await mastra.getAgent("agent").generate("Where is my order?");
+    span.setOutput(res.text);
+    return res;
+  });
+  return result;
+});
+```
+
+## Instrument a workflow step
+
+```typescript
+await tl.trace("order-workflow", async (trace) => {
+  await trace.span("step:fetch-order", async (span) => {
+    span.setInput({ orderId });
+    const order = await fetchOrder(orderId);
+    span.setOutput(order);
+  });
+
+  await trace.span("step:summarise", { spanType: "llm" }, async (span) => {
+    const text = await ai.generateText({
+      model: openai("gpt-4o-mini"),
+      prompt: `Summarise: ${JSON.stringify(order)}`,
+    });
+    span.setOutput(text);
+  });
+});
+```
+
+## What gets captured
+
+- A `trace` per workflow or agent run.
+- One `span` per workflow step or tool invocation (whatever you wrap).
+- Nested `llm` spans automatically when the Vercel AI SDK or OpenAI SDK is also instrumented — no extra code required.
+
+## Known gotchas
+
+- **No auto-discovery yet.** You must wrap each Mastra entry point explicitly. A dedicated `instrumentMastra` helper is on the roadmap.
+- **Next.js Edge runtime is unsupported.** Use `export const runtime = "nodejs"` on any Route Handler that invokes instrumented code.
+- **Streaming.** When using `agent.stream()`, keep the span open until the stream completes (`for await` loop inside the `span(...)` callback) so token counts are recorded.

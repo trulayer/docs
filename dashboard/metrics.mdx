@@ -42,6 +42,14 @@ Filters persist in the URL, so you can bookmark a view.
 - Click a model label in the legend → filter all charts to that model
 - Right-click a chart → **Copy embed URL** for sharing with teammates
 
+## Anomaly detection
+
+Every chart has an optional anomaly overlay (enable via the **Anomalies** toggle in the top-right). TruLayer fits a baseline on the trailing 7 days, bucketed by hour-of-week, and flags points more than 3σ outside the band. Anomalies appear as red dots on the chart.
+
+Click any anomaly dot to jump to the Traces page filtered to that time bucket with the originating filter set applied — useful for going from "latency p95 spiked at 14:05" to the exact 12 slow traces behind it.
+
+Anomalies also drive the failure-rate rules configured on the [Failures](./failures) page — see **Failures → Alert rules** for how to subscribe.
+
 ## Via API
 
 ```bash

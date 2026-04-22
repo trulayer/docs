@@ -1,0 +1,53 @@
+---
+title: "DSPy"
+description: "Trace every DSPy Predict and module call."
+---
+
+## Install
+
+```bash
+pip install trulayer dspy
+```
+
+## Instrument
+
+`instrument_dspy` is a process-wide patch — call it once at startup.
+
+```python
+import os
+import dspy
+import trulayer
+from trulayer.instruments.dspy import instrument_dspy
+
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project_name="my-app")
+
+with trulayer.trace("dspy-run") as trace:
+    instrument_dspy(trace)
+
+    dspy.configure(lm=dspy.LM("openai/gpt-4o-mini"))
+    qa = dspy.Predict("question -> answer")
+    result = qa(question="What is the capital of France?")
+    print(result.answer)
+```
+
+For long-running services, open a trace per request instead of wrapping startup — call `instrument_dspy(trace)` inside the request handler.
+
+## What gets captured
+
+- One `llm` span per `dspy.Predict.forward()` call with the rendered prompt as input and the parsed output fields (e.g. `answer`) as output.
+- Token counts, model name, and latency pulled from the underlying `dspy.LM` call.
+- Errors from the LM or from DSPy's field parsing surface as `span.status = error`.
+
+## Disabling
+
+```python
+from trulayer.instruments.dspy import uninstrument_dspy
+
+uninstrument_dspy()
+```
+
+## Known gotchas
+
+- **Global patch.** DSPy doesn't expose a per-instance hook, so instrumentation patches `dspy.Predict.forward` globally. Safe to call multiple times — subsequent calls are no-ops.
+- **Compile-time calls are traced too.** If you run `dspy.teleprompt` optimizers while instrumented, every candidate prompt evaluation shows up as a span. Consider calling `uninstrument_dspy()` during compilation and re-instrumenting at serve time.
+- **Async.** DSPy's async support is experimental; the current instrumentation is sync-only.
