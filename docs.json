@@ -60,6 +60,7 @@
             "pages": [
               "dashboard/overview",
               "dashboard/traces",
+              "dashboard/ingestion-health",
               "dashboard/evals",
               "dashboard/metrics"
             ]
