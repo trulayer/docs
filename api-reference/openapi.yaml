@@ -2,7 +2,33 @@ openapi: "3.1.0"
 info:
   title: TruLayer API
   version: "0.1.0"
-  description: Trace ingestion, evaluation, query, and feedback API for TruLayer AI.
+  description: |
+    Trace ingestion, evaluation, query, and feedback API for TruLayer AI.
+
+    ### Authentication
+
+    Two auth schemes coexist: SDK API keys (`Authorization: Bearer tl_...`)
+    and Clerk session JWTs (dashboard). Routes marked "requires Clerk auth"
+    in their summary are unreachable via API key.
+
+    ### Roles (TRU-54)
+
+    Dashboard requests carry one of five organization roles: `owner`,
+    `operator`, `member`, `auditor`, `viewer`. Endpoints enforce role
+    allowlists, not rank comparisons — `auditor` has access to
+    `/v1/audit-log` that `member` does not. See `docs/security.md` for
+    the full role-permission matrix.
+
+    - **owner** — full control including billing and member management.
+    - **operator** — on-call plane: everything `member` can do plus
+      control-loop execution, DLQ resolution, and destructive deletes on
+      failure-rules/model-routes/webhooks. No billing, no member
+      management.
+    - **member** — read + write (ingest, feedback, evals, API keys,
+      projects).
+    - **auditor** — read-only plus `/v1/audit-log` and `/v1/dlq` access
+      for compliance review.
+    - **viewer** — read-only dashboard access.
 
 servers:
   - url: https://api.trulayer.ai
@@ -23,7 +49,6 @@ tags:
   - name: eval-rules
   - name: control
   - name: apikeys
-  - name: projects
   - name: model-routes
   - name: datasets
   - name: search
@@ -34,89 +59,14 @@ tags:
   - name: ci
   - name: otlp
   - name: billing
+  - name: deprecations
+  - name: audit
   - name: failures
+  - name: projects
   - name: compliance
+  - name: dsr
 
 paths:
-  /v1/subprocessors:
-    get:
-      operationId: listSubprocessors
-      tags: [compliance]
-      security: []
-      summary: Public sub-processor registry
-      description: |
-        Returns TruLayer's current list of sub-processors as required by
-        GDPR Art. 28(2). Public — no authentication. Content is negotiated
-        via the `Accept` header:
-
-          - `application/rss+xml` (or `text/xml` / `application/xml`) →
-            RSS 2.0 feed including active sub-processors plus those
-            retired within the last 90 days.
-          - default / `application/json` → JSON envelope of active
-            sub-processors only.
-      responses:
-        "200":
-          description: Sub-processor list
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SubprocessorList"
-            application/rss+xml:
-              schema:
-                type: string
-                description: RSS 2.0 feed of sub-processor changes.
-
-  /v1/subprocessors/subscribe:
-    post:
-      operationId: subscribeSubprocessorChanges
-      tags: [compliance]
-      security: []
-      summary: Subscribe an email to sub-processor change notifications
-      description: |
-        Customer DPOs subscribe their email to receive 30-day advance
-        notice when a sub-processor is added or changed. Idempotent — a
-        200 response does not reveal whether the address was already
-        subscribed.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SubscribeRequest"
-      responses:
-        "200":
-          description: Subscribed (or already subscribed)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SubprocessorSubscribeResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-
-  /v1/subprocessors/unsubscribe:
-    post:
-      operationId: unsubscribeSubprocessorChanges
-      tags: [compliance]
-      security: []
-      summary: Unsubscribe an email from sub-processor change notifications
-      description: |
-        Idempotent — always returns 200 even when the email was never
-        subscribed, so the endpoint cannot be used to enumerate
-        subscribers.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SubscribeRequest"
-      responses:
-        "200":
-          description: Unsubscribed (or no-op)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SubprocessorSubscribeResponse"
-
   /health:
     get:
       operationId: getHealth
@@ -340,6 +290,32 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /v1/deprecations:
+    get:
+      operationId: listDeprecations
+      tags: [deprecations]
+      summary: List currently deprecated v1 fields and endpoints
+      description: |
+        Machine-readable index of fields and endpoints under `/v1` that have
+        been marked deprecated and are scheduled for removal. Empty array
+        means no deprecations are active.
+
+        See `docs/api-versioning.md` for the full policy. SDKs consume this
+        endpoint to emit build-time warnings; integrators consume it to audit
+        their exposure without scraping `Deprecation`/`Sunset` response
+        headers across every call site.
+      responses:
+        "200":
+          description: Deprecation list (possibly empty)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Deprecation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /v1/metrics:
     get:
       operationId: getMetrics
@@ -364,6 +340,247 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MetricsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/audit/verify:
+    get:
+      operationId: verifyAuditAnchor
+      tags: [audit]
+      security: []
+      summary: Verify a daily audit-log head-hash anchor (TRU-163)
+      description: |
+        Returns the recorded daily head-hash checkpoint for
+        `(tenant_id, date)` as written by the anchoring job. The
+        manifest itself is stored in S3 Object Lock (WORM) and is
+        signed with an Ed25519 key; this endpoint returns the mirror
+        stored in Postgres. Third-party auditors can cross-check the
+        `head_hash` against the signed S3 manifest (verifying the
+        signature locally) and, optionally, supply their own
+        `expected_head_hash` to get an immediate boolean match.
+
+        Unauthenticated by design — the anchors are public evidence.
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          description: UTC day, YYYY-MM-DD.
+        - name: expected_head_hash
+          in: query
+          required: false
+          schema: { type: string }
+          description: Optional. When provided, the response includes `hash_matches`.
+      responses:
+        "200":
+          description: Anchor found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditVerifyResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: No anchor recorded for the given (tenant_id, date)
+
+  /v1/subprocessors:
+    get:
+      operationId: listSubprocessors
+      tags: [compliance]
+      security: []
+      summary: Public sub-processor registry (TRU-52)
+      description: |
+        Returns TruLayer's current list of sub-processors as required
+        by GDPR Art. 28(2). Public — no authentication. Content is
+        negotiated via the `Accept` header:
+
+          - `application/rss+xml` (or `text/xml`/`application/xml`) →
+            RSS 2.0 feed including active sub-processors plus those
+            retired within the last 90 days.
+          - default / `application/json` → JSON envelope of active
+            sub-processors only.
+      responses:
+        "200":
+          description: Sub-processor list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubprocessorList"
+            application/rss+xml:
+              schema:
+                type: string
+                description: RSS 2.0 feed of sub-processor changes.
+
+  /v1/subprocessors/subscribe:
+    post:
+      operationId: subscribeSubprocessorChanges
+      tags: [compliance]
+      security: []
+      summary: Subscribe an email to sub-processor change notifications (TRU-52)
+      description: |
+        Customer DPOs subscribe their email to receive 30-day advance
+        notice when a sub-processor is added or changed. Idempotent —
+        a 200 response does not reveal whether the address was
+        already subscribed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscribeRequest"
+      responses:
+        "200":
+          description: Subscribed (or already subscribed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubprocessorSubscribeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /v1/subprocessors/unsubscribe:
+    post:
+      operationId: unsubscribeSubprocessorChanges
+      tags: [compliance]
+      security: []
+      summary: Unsubscribe an email from sub-processor change notifications (TRU-52)
+      description: |
+        Idempotent — always returns 200 even when the email was never
+        subscribed, so the endpoint cannot be used to enumerate
+        subscribers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscribeRequest"
+      responses:
+        "200":
+          description: Unsubscribed (or no-op)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubprocessorSubscribeResponse"
+
+  /v1/dsr:
+    post:
+      operationId: createDsrRequest
+      tags: [dsr]
+      summary: Submit a Data Subject Request (TRU-57)
+      description: |
+        Self-serve GDPR/CCPA intake. Creates a pending DSR row that a
+        background worker fulfils asynchronously. Dashboard-only — the
+        route requires a Clerk session and the `owner` or `member`
+        role. API keys cannot reach this endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDsrRequest"
+      responses:
+        "201":
+          description: DSR request accepted in pending state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DsrRequest"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Caller lacks the required role (owner or member)
+    get:
+      operationId: listDsrRequests
+      tags: [dsr]
+      summary: List Data Subject Requests for the authenticated tenant (TRU-57)
+      description: |
+        Returns DSR requests newest-first with opaque cursor pagination.
+        Dashboard-only.
+      parameters:
+        - name: cursor
+          in: query
+          description: Opaque cursor from a previous response's `next_cursor`.
+          schema: { type: string }
+        - name: limit
+          in: query
+          description: Page size (1–200, default 50).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Page of DSR requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DsrRequestList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/dsr/{id}:
+    get:
+      operationId: getDsrRequest
+      tags: [dsr]
+      summary: Fetch a single DSR request (TRU-57)
+      description: Dashboard-only. Returns 404 when the row is not in the caller's tenant.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: DSR request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DsrRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: DSR request not found in this tenant
+
+  /v1/ingestion-health:
+    get:
+      operationId: getIngestionHealth
+      tags: [metrics]
+      summary: Customer-facing ingestion pipeline health (TRU-167)
+      description: |
+        Returns ingest reliability signals (success/error rate, top error
+        categories, DLQ depth, ingest lag percentiles, last-span timestamp,
+        redaction match count) scoped to the authenticated tenant so
+        customers can self-diagnose pipeline issues.
+      parameters:
+        - name: project_id
+          in: query
+          description: Filter to a single project. Omit for all projects in the tenant.
+          schema: { type: string, format: uuid }
+        - name: window
+          in: query
+          description: Rolling time window. Defaults to `24h`.
+          schema:
+            type: string
+            enum: [1h, 24h, 7d]
+            default: 24h
+      responses:
+        "200":
+          description: Ingestion-health report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestionHealthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -908,7 +1125,7 @@ paths:
     post:
       operationId: createAPIKey
       tags: [apikeys]
-      summary: Create an API key (owner or member; requires Clerk auth)
+      summary: Create an API key (owner or member; requires Clerk auth — operator intentionally excluded)
       requestBody:
         required: true
         content:
@@ -950,15 +1167,15 @@ paths:
       tags: [projects]
       summary: List projects for the authenticated tenant
       description: |
-        Reachable via Clerk session auth (dashboard) and via API key
-        auth carrying the `query` scope (MCP server, SDK clients). Only
+        Reachable via **Clerk session auth** (dashboard) and via **API key
+        auth** carrying the `query` scope (MCP server, SDK clients). Only
         returns projects that belong to the caller's tenant — tenant
         isolation is enforced server-side.
 
         When `cursor` or `limit` is supplied the response is a single
         keyset-paginated page with `next_cursor` and `has_more`. When
         neither is supplied the response is the full list with no
-        pagination fields.
+        pagination fields, preserving the dashboard contract.
       parameters:
         - name: include_archived
           in: query
@@ -993,7 +1210,7 @@ paths:
         Partial update — supply only the fields you want to change. Current
         supported fields are `name` (human-readable project name; also
         drives the slug) and `retention_days_override` (per-project
-        retention window).
+        retention window; TRU-170).
 
         `retention_days_override` must be between 1 and the caller's plan
         retention cap (Starter=30, Pro=90, Team=180, Enterprise=unlimited).
@@ -1020,7 +1237,7 @@ paths:
         "400":
           description: |
             Bad request — malformed body or retention override outside the
-            plan-allowed range.
+            plan-allowed range (`error.retention_override_exceeds_plan`).
           content:
             application/json:
               schema:
@@ -1313,7 +1530,7 @@ paths:
       description: >
         Embeds the `q` query server-side using the tenant's configured BYOK
         embedding key (OpenAI preferred, Anthropic fallback), then runs
-        vector similarity search over span embeddings. Designed for MCP
+        pgvector similarity search over span embeddings. Designed for MCP
         agents and other callers that cannot produce a 1536-dim vector
         directly.
       parameters:
@@ -1433,7 +1650,7 @@ paths:
     delete:
       operationId: deleteWebhook
       tags: [webhooks]
-      summary: Delete a webhook (owner only)
+      summary: Delete a webhook (owner or operator)
       parameters:
         - name: id
           in: path
@@ -1884,41 +2101,6 @@ components:
       properties:
         error: { type: string }
 
-    Subprocessor:
-      type: object
-      required: [id, vendor, purpose, region, effective_at]
-      properties:
-        id: { type: string, format: uuid }
-        vendor: { type: string }
-        purpose: { type: string }
-        region: { type: string }
-        dpa_url: { type: string, nullable: true }
-        effective_at: { type: string, format: date-time }
-        retired_at: { type: string, format: date-time, nullable: true }
-
-    SubprocessorList:
-      type: object
-      required: [subprocessors, updated_at]
-      properties:
-        subprocessors:
-          type: array
-          items: { $ref: "#/components/schemas/Subprocessor" }
-        updated_at: { type: string, format: date-time }
-
-    SubscribeRequest:
-      type: object
-      required: [email]
-      properties:
-        email: { type: string, format: email }
-
-    SubprocessorSubscribeResponse:
-      type: object
-      required: [status]
-      properties:
-        status:
-          type: string
-          enum: [subscribed, unsubscribed]
-
     HealthResponse:
       type: object
       required: [status, time]
@@ -2151,6 +2333,23 @@ components:
         next_cursor: { type: string, nullable: true }
         has_more: { type: boolean }
 
+    # ── Deprecations ─────────────────────────────────────────────────────────────
+
+    Deprecation:
+      type: object
+      required: [field, endpoint, sunset_date]
+      description: |
+        One currently-deprecated v1 field or endpoint. `field` is the
+        JSON-path-style name within the response body (e.g. `trace_id`,
+        `metadata.project`); for whole-endpoint deprecations use `field: ""`.
+        `endpoint` is the path template (e.g. `/v1/traces/{id}`).
+        `sunset_date` is the ISO-8601 date on or after which the field or
+        endpoint will be removed — matches the `Sunset` response header.
+      properties:
+        field: { type: string }
+        endpoint: { type: string }
+        sunset_date: { type: string, format: date }
+
     # ── Metrics ──────────────────────────────────────────────────────────────────
 
     MetricsResponse:
@@ -2166,6 +2365,240 @@ components:
         total_cost: { type: number, nullable: true }
         from: { type: string, format: date-time }
         to: { type: string, format: date-time }
+
+    # ── Ingestion health (TRU-167) ───────────────────────────────────────────────
+
+    IngestionHealthTopError:
+      type: object
+      required: [category, count]
+      properties:
+        category: { type: string, description: "Coarse error category (first 64 chars of the error text)" }
+        count: { type: integer, format: int64 }
+
+    IngestionHealthDLQDepth:
+      type: object
+      required: [traces, evals]
+      properties:
+        traces: { type: integer, format: int64 }
+        evals: { type: integer, format: int64 }
+
+    IngestionHealthLag:
+      type: object
+      required: [p50, p95, p99]
+      properties:
+        p50: { type: integer, format: int64 }
+        p95: { type: integer, format: int64 }
+        p99: { type: integer, format: int64 }
+
+    AuditVerifyResponse:
+      type: object
+      required:
+        - verified
+        - date
+        - head_hash
+        - row_count
+        - s3_key
+        - anchored_at
+      properties:
+        verified:
+          type: boolean
+          description: "True when an anchor row exists for the given (tenant_id, date)."
+        date:
+          type: string
+          format: date
+        head_hash:
+          type: string
+          description: "Hex-encoded sha256 of the audit-log chain head as of the anchor date."
+        row_count:
+          type: integer
+          format: int64
+        s3_key:
+          type: string
+          description: "Object key of the signed manifest in the anchor S3 bucket."
+        anchored_at:
+          type: string
+          format: date-time
+        hash_matches:
+          type: boolean
+          nullable: true
+          description: "Present only when the caller provided `expected_head_hash`."
+
+    Subprocessor:
+      type: object
+      required:
+        - id
+        - vendor
+        - purpose
+        - region
+        - effective_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        vendor:
+          type: string
+        purpose:
+          type: string
+        region:
+          type: string
+        dpa_url:
+          type: string
+          nullable: true
+        effective_at:
+          type: string
+          format: date-time
+        retired_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    SubprocessorList:
+      type: object
+      required:
+        - subprocessors
+        - updated_at
+      properties:
+        subprocessors:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subprocessor"
+        updated_at:
+          type: string
+          format: date-time
+
+    SubscribeRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+
+    SubprocessorSubscribeResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [subscribed, unsubscribed]
+
+    CreateDsrRequest:
+      type: object
+      required:
+        - subject_id
+        - type
+      properties:
+        subject_id:
+          type: string
+          description: Opaque identifier for the data subject in the customer's namespace.
+        type:
+          type: string
+          enum: [delete, export]
+          description: |
+            `delete` triggers erasure (GDPR Art. 17 / CCPA right to delete);
+            `export` triggers data export (GDPR Art. 15 / CCPA right to know).
+
+    DsrRequest:
+      type: object
+      required:
+        - id
+        - created_at
+        - updated_at
+        - tenant_id
+        - requested_by
+        - subject_id
+        - type
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        tenant_id:
+          type: string
+          format: uuid
+        requested_by:
+          type: string
+          description: Clerk user ID of the dashboard user who submitted the request.
+        subject_id:
+          type: string
+        type:
+          type: string
+          enum: [delete, export]
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        export_url:
+          type: string
+          nullable: true
+          description: Signed URL pointing at the export artefact. Set only for completed `export` requests.
+        error_msg:
+          type: string
+          nullable: true
+          description: Terse failure description. Set only when `status = failed`.
+
+    DsrRequestList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DsrRequest"
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page; omitted when there are no further rows.
+
+    IngestionHealthResponse:
+      type: object
+      required:
+        - window
+        - success_rate
+        - error_rate
+        - top_errors
+        - dlq_depth
+        - ingest_lag_ms
+        - redaction_match_count
+      properties:
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: "Echoes the `project_id` query param when set; omitted for tenant-wide reports."
+        window:
+          type: string
+          enum: [1h, 24h, 7d]
+        success_rate:
+          type: number
+          description: "Fraction 0–1 of traces without an error. 1.0 when no traffic in the window."
+        error_rate:
+          type: number
+          description: "Fraction 0–1 of traces with a non-empty error."
+        top_errors:
+          type: array
+          items: { $ref: "#/components/schemas/IngestionHealthTopError" }
+        dlq_depth: { $ref: "#/components/schemas/IngestionHealthDLQDepth" }
+        ingest_lag_ms: { $ref: "#/components/schemas/IngestionHealthLag" }
+        last_successful_span_at:
+          type: string
+          format: date-time
+          nullable: true
+        redaction_match_count:
+          type: integer
+          format: int64
+          description: "Zero until redaction instrumentation lands."
 
     # ── Feedback ─────────────────────────────────────────────────────────────────
 
@@ -2534,9 +2967,9 @@ components:
           nullable: true
           minimum: 1
           description: |
-            Per-project retention override. When `null`, retention follows
-            the plan default; when set, must be between 1 and the plan's
-            retention cap (unbounded on Enterprise).
+            Per-project retention override (TRU-170). When `null`, retention
+            follows the plan default; when set, must be between 1 and the
+            plan's RetentionDays cap (unbounded on Enterprise).
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
