@@ -11,20 +11,20 @@ TruLayer integrates with the major LLM SDKs and orchestration frameworks via aut
 | --------- | ----------- | ------ |
 | [OpenAI](/integrations/openai) | Python, TypeScript | `instrument_openai(client)` / `instrumentOpenAI(client)` |
 | [Anthropic](/integrations/anthropic) | Python, TypeScript | `instrument_anthropic(client)` / `instrumentAnthropic(client)` |
-| Vercel AI SDK | TypeScript | `instrumentVercelAI()` |
-| LlamaIndex | Python | `instrument_llamaindex()` |
-| PydanticAI | Python | `instrument_pydantic_ai()` |
+| [Vercel AI SDK](/integrations/vercel-ai-sdk) | TypeScript | `instrumentVercelAI(tl, { generateText, streamText })` |
+| [LlamaIndex](/integrations/llamaindex) | Python | `instrument_llamaindex()` |
+| [PydanticAI](/integrations/pydanticai) | Python | `instrument_pydanticai(agent, trace)` |
 
 ## Tier 2 (supported at V1 Phase 2)
 
 | Framework | Language(s) | Helper |
 | --------- | ----------- | ------ |
-| LangChain | Python, TypeScript | `instrument_langchain()` / `instrumentLangChain()` |
-| CrewAI | Python | `instrument_crewai()` |
-| Mastra | TypeScript | `instrumentMastra()` |
-| DSPy | Python | `instrument_dspy()` |
-| Haystack | Python | `instrument_haystack()` |
-| AutoGen | Python | `instrument_autogen()` |
+| [LangChain](/integrations/langchain) | Python, TypeScript | `instrument_langchain(client)` / `TruLayerCallbackHandler` |
+| [CrewAI](/integrations/crewai) | Python | `instrument_crewai(crew, trace)` |
+| [Mastra](/integrations/mastra) | TypeScript | Generic `trace()` / `span()` API |
+| [DSPy](/integrations/dspy) | Python | `instrument_dspy(trace)` |
+| [Haystack](/integrations/haystack) | Python | `instrument_haystack(pipeline, trace)` |
+| [AutoGen](/integrations/autogen) | Python | `instrument_autogen(agent, trace)` |
 
 ## Not supported? Use manual instrumentation.
 

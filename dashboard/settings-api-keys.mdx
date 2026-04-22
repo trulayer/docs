@@ -1,0 +1,57 @@
+---
+title: "Settings — API keys"
+description: "Create, scope, rotate, and revoke TruLayer API keys."
+---
+
+API keys authenticate your SDK, services, and read-only clients with TruLayer. Manage them under **Settings → API keys**.
+
+{/* screenshot: API keys list (TODO) */}
+
+## List view
+
+Columns:
+
+- **Name** — the label you gave the key at creation.
+- **Prefix** — the first 8 characters of the key (e.g. `tl_live_4f2a…`). The plaintext secret is never shown after creation.
+- **Scope** — `full` or `query_only`.
+- **Created** / **Last used** — timestamps; stale keys are candidates for rotation.
+- **Status** — `active` or `revoked`. Revoked keys remain visible for audit.
+
+## Scopes
+
+When creating a key you pick one scope:
+
+- **Full access** — read + write across every TruLayer endpoint. Use for ingestion (SDK, backend services) and for anything that mutates traces, feedback, eval runs, or policies.
+- **Query only** — read-only access to traces, evals, and metrics. Use for MCP servers, AI agents, and any read-only analytical client. Query-only keys cannot ingest traces or mutate any resource.
+
+<Tip>
+If you are wiring TruLayer into an LLM agent or an MCP server, pick **Query only**. It limits blast radius if the key is leaked — an attacker cannot poison your trace data or revoke other keys.
+</Tip>
+
+Keys created before scopes shipped continue to work as **Full access** — no action required.
+
+## Creating a key
+
+1. Open **Settings → API keys**.
+2. Click **New key**.
+3. Give it a descriptive name (for example `agent-production` or `ci-ingest`).
+4. Choose a scope — **Full access** or **Query only**.
+5. Click **Create**. **Copy the plaintext key immediately** — it is not shown again.
+
+Store the secret in your deployment platform's secret manager (Vercel env vars, AWS Secrets Manager, 1Password, etc.) — never commit it to git.
+
+## Rotating a key
+
+TruLayer supports overlapping validity — create a new key, deploy it, then revoke the old one:
+
+1. **New key** with the same scope; name it with a version suffix (`agent-production-v2`).
+2. Roll the new key out via env vars; confirm traces are still ingesting (dashboard shows **Last used** timestamp updating).
+3. Revoke the old key from the list.
+
+No downtime if the rollout happens within the revocation window.
+
+## Revoking a key
+
+Revoking is immediate and cannot be undone. Revoked keys remain in the list (marked **Revoked**) so you keep an audit trail of when each key was active.
+
+Requests authenticated with a revoked key return HTTP `401` with `error.code = "key_revoked"`.

@@ -1,10 +1,59 @@
 ---
 title: "Failures"
-description: "Clustered failures and root-cause analysis."
+description: "Clustered failures, root-cause analysis, and alert rules."
 ---
 
-<Note>
-This page is a placeholder. Detailed documentation for the Failures dashboard is coming soon.
-</Note>
+The **Failures** page groups traces by failure signature, surfaces regressions, and lets you configure alerts so you find out about incidents before your users do.
 
-The **Failures** page groups traces by failure signature — clustering similar errors, surfacing regressions, and linking each cluster back to the affected traces and spans for root-cause analysis.
+{/* screenshot: Failures overview with cluster list (TODO) */}
+
+## Cluster list
+
+Each row is a **failure cluster** — a group of traces that share the same normalised error signature (error type, message skeleton, and top contributing span). Columns:
+
+- **Signature** — human-readable cluster label (e.g. `timeout in llm:openai.chat.completions`).
+- **Count** — traces in the cluster within the selected window.
+- **Trend** — sparkline of cluster volume, last 24 h.
+- **First / last seen** — helpful for spotting regressions tied to a deploy.
+- **Impact** — unique sessions and unique users affected.
+- **Status** — `new`, `acknowledged`, `resolved`.
+
+Filter by project, environment, model, status, and time range. The URL encodes the full filter state, so share links with teammates.
+
+## Cluster detail
+
+Click any cluster to open the root-cause view.
+
+{/* screenshot: Failure cluster root-cause view (TODO) */}
+
+- **Top contributing spans** — the 3–5 span names most frequently marked as the failure origin across traces in the cluster, with counts and average latency.
+- **Representative error messages** — de-duplicated error strings with per-variant counts. Click to pivot to a matching trace.
+- **Linked traces** — paginated list of every trace in the cluster; click through to the trace detail and span waterfall.
+- **Feedback overlay** — any negative user feedback attached to cluster traces shows up here for context.
+
+Use the **Acknowledge** and **Resolve** buttons to change cluster status. Resolved clusters are hidden by default in the list view; filter `status = resolved` to see them.
+
+## Alert rules
+
+From **Failures → Alert rules**, create rules that fire on cluster or failure-rate conditions.
+
+{/* screenshot: Alert rule creation form (TODO) */}
+
+Rule fields:
+
+- **Name** — shown on the alert payload.
+- **Trigger** — one of:
+  - `failure_rate > threshold` over a rolling window (e.g. `> 2% over 5 minutes`)
+  - `cluster_count > threshold` for a new or existing cluster
+  - `cluster.first_seen` — fires the first time a signature appears
+- **Scope** — project, environment, model, or metadata filter.
+- **Channel** — webhook URL (JSON payload) or email recipients.
+- **Cooldown** — suppress repeated fires within the interval (default 15 minutes).
+
+Rules can be put in **dry-run** mode — they evaluate and appear in the alert history but do not send notifications. Use this when tuning thresholds.
+
+## Common workflows
+
+- **New deploy monitoring.** Filter to `first_seen > deploy_time` to see clusters introduced by the latest release.
+- **Triage the weekly on-call.** Sort clusters by Impact desc, work top-down.
+- **Close the loop with ownership.** Add a metadata filter (`metadata.team = "payments"`) to alert rules so only the right team gets paged.

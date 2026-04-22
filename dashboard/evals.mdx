@@ -65,3 +65,15 @@ curl https://api.trulayer.ai/v1/eval \
 ```
 
 Or configure evaluators to run automatically on every ingested trace matching a filter — see **Evaluators → Triggers**.
+
+## Trends
+
+The **Trends** tab on a dataset or evaluator plots the aggregate score (mean / pass rate) over time, one line per run. Use it to spot regressions introduced by a prompt tweak, a model swap, or a framework upgrade. Click a point to jump to the underlying run.
+
+## Regression tests
+
+Pin a dataset as a **regression dataset** under a project's settings. When a deployment publishes a new model id or prompt version (via the `deployment.created` webhook or the `/v1/deployments` API), TruLayer automatically runs every pinned dataset against the new configuration and posts the diff back to the triggering PR.
+
+- New failures (regressions) block the deployment when **enforce** is on.
+- Score deltas greater than the configured threshold (default 5%) are flagged.
+- A full comparison run shows up under the deployment's detail page in the [Control](./control) dashboard.

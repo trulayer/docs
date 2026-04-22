@@ -1,0 +1,73 @@
+---
+title: "Control"
+description: "Automated actions, policies, HITL approvals, and the kill-switch."
+---
+
+The **Control** page is TruLayer's closed-loop surface: define what should happen when a trace matches a condition (retry, fall back to a safer model, block the response, or escalate to a human), roll actions out gradually, and pull the emergency brake if something goes wrong.
+
+{/* screenshot: Control overview with active policies (TODO) */}
+
+## Control actions
+
+An **action** is the unit of automation. Every policy fires one action when its trigger matches.
+
+| Action | What it does |
+| ------ | ------------ |
+| `retry` | Re-invoke the same model with the same input, up to N attempts. Records a `retry` span under the original trace. |
+| `fallback` | Re-invoke a different model (usually cheaper or more conservative) with the same input. |
+| `block` | Return a static safe response to the end user (configurable text). The original unsafe output is still stored as an evidence span. |
+| `escalate` | Park the trace in the HITL queue; do not return to the user until approved. |
+
+Actions are invoked at response time by the TruLayer SDK when a policy matches. The SDK returns the post-action output; your app doesn't need to know whether a retry or fallback fired.
+
+## Policies
+
+Policies glue triggers to actions. Create one from **Control → Policies → New policy**.
+
+{/* screenshot: Policy form with trigger and action (TODO) */}
+
+Fields:
+
+- **Name** — shown in audit logs.
+- **Scope** — project, environment, model, and optional metadata filter.
+- **Trigger** — evaluator score or rule match. The most common shape:
+  - `eval_score.hallucination < 0.5` → fallback to a stricter model
+  - `eval_score.toxicity > 0.7` → block
+  - `span.error_type = "rate_limit"` → retry with backoff
+- **Action** — one of the four above, with action-specific parameters (retry count, fallback model id, block text, HITL queue).
+- **Rollout %** — integer 0–100. Policy evaluates on 100% of matching traces but only fires the action on this fraction. Use for canaries.
+- **Mode** — `dry-run` (logs what it would have done, does nothing), `shadow` (fires alongside the original response, does not replace it), `enforce` (default — action replaces the response).
+
+Every policy evaluation records a `policy_evaluation` event on the trace so you can audit what fired when.
+
+## Kill-switch
+
+**Control → Kill-switch** is an owner-only emergency halt.
+
+{/* screenshot: Kill-switch confirmation modal (TODO) */}
+
+When engaged:
+
+- All `enforce`-mode policies become `dry-run` within ~5 seconds (propagated via the SDK config refresh).
+- `shadow` and `dry-run` policies continue to run as normal.
+- A banner appears across the dashboard until the kill-switch is released.
+- Every API key is notified via a one-time email to the workspace owner.
+
+Use it when a bad policy is causing more harm than the underlying issue. Release it from the same page; the scope of the halt is logged in the audit trail.
+
+## HITL — Human in the loop
+
+**Control → HITL** shows pending approvals.
+
+{/* screenshot: HITL queue with pending approvals (TODO) */}
+
+- **Queue** — one row per trace that hit an `escalate` action, with the original input, the proposed output, and the triggering policy. Sorted oldest-first.
+- **Approve** / **Reject** — Approving releases the output to the end user; rejecting sends the configured block response and attaches the reject reason to the trace as metadata. Both actions are logged.
+- **Reviewer notes** — free-text attached to the trace for downstream analysis.
+- **SLA timer** — each queue item shows time-in-queue. Configure a hard timeout per policy (default 5 minutes) that auto-rejects if no reviewer acts.
+
+Only users with role `operator` or `owner` can approve/reject. See [Team settings](./settings-team) for roles.
+
+## Audit trail
+
+Every policy creation, edit, rollout change, kill-switch engagement, and HITL decision is recorded in **Control → Audit log**. Export to CSV for SOC 2 reviews.

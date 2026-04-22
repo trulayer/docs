@@ -1,0 +1,44 @@
+---
+title: "Haystack"
+description: "Trace every Haystack v2 pipeline run and component execution."
+---
+
+## Install
+
+```bash
+pip install trulayer haystack-ai
+```
+
+## Instrument
+
+`instrument_haystack` wraps a single `Pipeline` instance. Call it after the pipeline is built, before `run()`.
+
+```python
+import os
+import trulayer
+from haystack import Pipeline
+from haystack.components.generators import OpenAIGenerator
+from trulayer.instruments.haystack import instrument_haystack
+
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project_name="my-app")
+
+pipe = Pipeline()
+pipe.add_component("llm", OpenAIGenerator(model="gpt-4o-mini"))
+
+with trulayer.trace("haystack-run") as trace:
+    instrument_haystack(pipe, trace)
+    result = pipe.run({"llm": {"prompt": "What is the capital of France?"}})
+    print(result["llm"]["replies"][0])
+```
+
+## What gets captured
+
+- A `pipeline` root span around every `Pipeline.run()` call, with `data` as input and the final result dict as output.
+- One child span per component in the pipeline (retrievers, generators, rankers, converters) with that component's input and output attached.
+- Generator components' LLM calls appear as `llm` spans with token counts and model metadata.
+
+## Known gotchas
+
+- **Haystack v2 only.** The legacy Haystack v1 API (`BaseComponent`) is not supported.
+- **Component names matter.** Span names come from the `name` passed to `pipe.add_component(...)` — use descriptive names (`retriever`, `reranker`) to make the waterfall readable.
+- **`run_async` works.** The async pipeline path is instrumented via the same function — one call covers both.

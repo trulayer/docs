@@ -1,0 +1,51 @@
+---
+title: "Settings — Billing"
+description: "Manage your plan, payment method, and invoices."
+---
+
+**Settings → Billing** is powered by Stripe. Plan changes and invoice history are accessible here without leaving the dashboard.
+
+{/* screenshot: Billing overview with current plan (TODO) */}
+
+## Current plan
+
+The top card shows:
+
+- Plan name (Starter / Pro / Team / Enterprise).
+- Monthly price and billing cycle.
+- Renewal date.
+- Quick links to **Change plan** and **Manage payment method**.
+
+## Upgrade or downgrade
+
+Clicking **Change plan** opens a diff view comparing your current plan with the target plan: included spans, evals, seats, retention, and price.
+
+{/* screenshot: Plan change confirmation with data-loss notice (TODO) */}
+
+- **Upgrade** — takes effect immediately. The new quota is prorated for the remainder of the billing period.
+- **Downgrade** — takes effect at the start of the next billing cycle so you don't lose paid-for capacity.
+
+<Warning>
+Downgrading to a plan with shorter retention triggers a data-loss notice. Traces older than the new plan's retention window are deleted at the next nightly prune after the downgrade activates. Export anything you need before confirming.
+</Warning>
+
+Payments flow through Stripe Checkout. For self-serve plan changes you stay in the dashboard; enterprise contracts are negotiated out-of-band — contact sales@trulayer.ai.
+
+## Payment method
+
+**Manage payment method** opens the Stripe Customer Portal in a new tab, where you can:
+
+- Update card details.
+- Change the billing email.
+- Download past invoices as PDF.
+- Update your tax ID / VAT details.
+
+Changes in the Stripe portal sync back to TruLayer within a few seconds.
+
+## Invoice history
+
+The **Invoices** tab lists every past invoice with date, amount, status, and download links (PDF and CSV). Hosted Stripe invoice URLs are available for forwarding to finance teams.
+
+## Cancellation
+
+Cancel from the Stripe Customer Portal. Your workspace remains on the current plan until the end of the paid billing period, then drops to a read-only archive for 30 days before data is purged. During the archive window you can reactivate by resubscribing.
