@@ -65,6 +65,7 @@ tags:
   - name: projects
   - name: compliance
   - name: dsr
+  - name: policies
 
 paths:
   /health:
@@ -549,6 +550,150 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           description: DSR request not found in this tenant
+
+  /v1/policies:
+    post:
+      operationId: createPolicy
+      tags: [policies]
+      summary: Create a Control Loop Policy (TRU-67 Phase 1)
+      description: |
+        Creates a named YAML-DSL policy in `draft` status. Dashboard-only
+        (Clerk session + member role required). Phase 2 (follow-up
+        issue) adds the automated evaluator that applies active policies
+        to eval events; Phase 1 is CRUD only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePolicyRequest"
+      responses:
+        "201":
+          description: Policy created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Caller lacks the required role (owner, operator, or member)
+    get:
+      operationId: listPolicies
+      tags: [policies]
+      summary: List Control Loop Policies (TRU-67 Phase 1)
+      description: Dashboard-only. Supports optional status filter + pagination.
+      parameters:
+        - name: status
+          in: query
+          description: Filter by lifecycle status.
+          schema:
+            type: string
+            enum: [draft, active, paused, archived]
+        - name: limit
+          in: query
+          description: Page size (1–200, default 50).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          description: Offset into the result set (default 0).
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Page of policies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicyListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/policies/{id}:
+    get:
+      operationId: getPolicy
+      tags: [policies]
+      summary: Fetch a single policy (TRU-67 Phase 1)
+      description: Dashboard-only. Returns 404 when the row is not in the caller's tenant.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Policy not found in this tenant
+    patch:
+      operationId: updatePolicy
+      tags: [policies]
+      summary: Update a policy (TRU-67 Phase 1)
+      description: PATCH semantics. Dashboard-only. Requires member+.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePolicyRequest"
+      responses:
+        "200":
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Policy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Caller lacks the required role
+        "404":
+          description: Policy not found in this tenant
+    delete:
+      operationId: archivePolicy
+      tags: [policies]
+      summary: Archive a policy (TRU-67 Phase 1)
+      description: |
+        Soft-delete — sets status=archived. Owner-only. Phase 2
+        control_actions rows link back to policies so we never hard
+        delete.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Policy archived
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Caller lacks owner role
+        "404":
+          description: Policy not found in this tenant
 
   /v1/ingestion-health:
     get:
@@ -2560,6 +2705,140 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next page; omitted when there are no further rows.
+
+    Policy:
+      type: object
+      required:
+        - id
+        - created_at
+        - updated_at
+        - tenant_id
+        - name
+        - description
+        - status
+        - rule_yaml
+        - trigger_type
+        - action_type
+        - rollout_pct
+        - dry_run
+        - created_by
+      properties:
+        id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        tenant_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [draft, active, paused, archived]
+        rule_yaml:
+          type: string
+          description: Raw YAML DSL as authored. Opaque to the server in Phase 1.
+        trigger_type:
+          type: string
+          enum: [eval_score, anomaly, failure_rate]
+          description: Denormalised summary of the `when:` clause for fast filtering.
+        action_type:
+          type: string
+          enum: [retry, fallback_model, route_pct, block, escalate]
+          description: Denormalised summary of the `then:` clause for fast filtering.
+        rollout_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Staged-rollout percentage. 0 means the policy is authored but inactive.
+        dry_run:
+          type: boolean
+          description: When true, the evaluator records observations without applying the action.
+        created_by:
+          type: string
+          description: Clerk user ID of the author.
+
+    CreatePolicyRequest:
+      type: object
+      required:
+        - name
+        - rule_yaml
+        - trigger_type
+        - action_type
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rule_yaml:
+          type: string
+        trigger_type:
+          type: string
+          enum: [eval_score, anomaly, failure_rate]
+        action_type:
+          type: string
+          enum: [retry, fallback_model, route_pct, block, escalate]
+        rollout_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+          default: 0
+        dry_run:
+          type: boolean
+          default: true
+
+    UpdatePolicyRequest:
+      type: object
+      description: PATCH body — all fields optional; only supplied fields are changed.
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rule_yaml:
+          type: string
+        trigger_type:
+          type: string
+          enum: [eval_score, anomaly, failure_rate]
+        action_type:
+          type: string
+          enum: [retry, fallback_model, route_pct, block, escalate]
+        rollout_pct:
+          type: integer
+          minimum: 0
+          maximum: 100
+        dry_run:
+          type: boolean
+        status:
+          type: string
+          enum: [draft, active, paused, archived]
+
+    PolicyListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Policy"
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+        offset:
+          type: integer
 
     IngestionHealthResponse:
       type: object
