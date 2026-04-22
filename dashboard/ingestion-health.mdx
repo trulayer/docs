@@ -1,0 +1,120 @@
+---
+title: "Ingestion health"
+description: "Self-diagnose ingest issues — success rate, latency, DLQ depth, and top errors — without opening a support ticket."
+---
+
+The **Ingestion health** page is a per-project operational dashboard for the path your spans take from SDK to storage. When traces aren't showing up, or something looks off, this is the first place to look.
+
+## Why this exists
+
+You shouldn't need to email support to know whether your data is flowing. Every project gets a live view of ingest success rate, latency, dead-letter depth, top error categories, and redaction activity. If the dashboard is green, the problem is almost always in your app or network. If it's red, it points you at the exact failure mode.
+
+## How to get there
+
+**Settings** → **Projects** → select a project → **Health** tab.
+
+The same data is also summarised on the **Traces** page in a compact tile in the top-right — click through from there to open the full dashboard.
+
+## Stat cards
+
+The top of the page shows six cards. All values respect the window selector.
+
+### Success rate
+
+Percentage of ingest requests that landed a span in storage. Anything above 99.5% is normal background noise. A sustained drop below 99% usually means a bad deploy, a credential rotation, or a schema mismatch.
+
+### Error rate
+
+Inverse of success rate, broken down by category (see **Top errors** below). Shown as both a percentage and an absolute count so you can distinguish "small sample, one failure" from "sustained outage".
+
+### Ingest lag (p50 / p95 / p99)
+
+End-to-end latency from SDK `flush()` to span visible in the dashboard, in milliseconds. Healthy ranges:
+
+- **p50** — under 500 ms
+- **p95** — under 2,000 ms
+- **p99** — under 5,000 ms
+
+High p99 with a healthy p50 is usually a hot partition or a slow downstream; high p50 is a platform problem and you should check [status.trulayer.ai](https://status.trulayer.ai).
+
+### DLQ depth
+
+Number of spans parked in the dead-letter queue for this project. Spans land in the DLQ when ingest fails in a way that isn't worth retrying inline — usually schema validation errors or over-size payloads.
+
+**DLQ depth should be zero.** If it isn't, see [Troubleshooting](#troubleshooting) below.
+
+### Last successful span
+
+Timestamp of the most recently accepted span. If this is more than a few minutes stale while your app is running, ingest is stuck for this project even if overall success rate looks okay — you may be hitting a per-project rate limit or a project-scoped auth problem.
+
+### Redaction matches
+
+Count of fields your [redaction rules](/sdks/redaction) matched and scrubbed in this window. Useful as a sanity check — if you added a new rule and this counter stays at zero, your rule probably isn't matching.
+
+## Window selector
+
+A segmented control at the top-right of the page controls the time range for every card and table.
+
+- **1h** — use during an active incident or right after a deploy. Tightest signal, noisiest numbers.
+- **24h** — default for daily ops. Good balance of signal and stability.
+- **7d** — use for trend analysis — "did error rate creep up this week?" Avoid for incident response; rolling windows smear short outages.
+
+## Top errors
+
+A table below the stat cards breaks errors down by category. Columns:
+
+- **Category** — one of the values below
+- **Count** — occurrences in the window
+- **Last seen** — timestamp of the most recent occurrence
+- **Example** — redacted error message from a recent instance
+
+### Categories
+
+- **`auth`** — rejected API key or expired token. Usually a rotated key that didn't make it into your deploy env.
+- **`schema`** — span payload didn't match the expected shape. Almost always an SDK version mismatch or a hand-rolled HTTP call.
+- **`rate_limit`** — you're over the per-project ingest quota. Check your plan or batch more aggressively.
+- **`payload_too_large`** — a single span exceeded the size cap (1 MB). Usually a prompt or tool-call result that needs trimming or redacting before it hits `trace()`.
+- **`downstream`** — our side. If you see this, check [status.trulayer.ai](https://status.trulayer.ai); we're already paged.
+- **`unknown`** — anything we couldn't classify. If this is non-trivial, send the trace IDs to support.
+
+## Roles and permissions
+
+Any member of the project can view this page — it's read-only operational data, not billing or credentials.
+
+DLQ replay (re-ingesting parked spans after you fix the root cause) requires the **Operator** role or higher. The replay control isn't shipped yet; for now, contact support if you need spans reprocessed.
+
+## Troubleshooting
+
+### DLQ depth > 0 — what to do
+
+1. Open **Top errors** and find the category driving the count — almost always `schema` or `payload_too_large`.
+2. Click through to the example — it'll show the offending span's ID and the validation failure.
+3. Fix the root cause in your app (update SDK, trim payload, correct field type).
+4. Redeploy and confirm new spans land successfully (success rate back to ~100%, no new DLQ additions).
+5. Ask support to replay the DLQ once you've confirmed the fix is live — otherwise the replayed spans will just fail again.
+
+### High error rate — common causes
+
+In rough order of frequency:
+
+1. **Wrong or rotated API key.** Check `TRULAYER_API_KEY` in your deploy env matches the key in **Settings** → **API keys**. Rotated keys are the #1 cause of sudden `auth` spikes.
+2. **SDK version skew.** An old SDK sending a deprecated field, or a new SDK sending a field the server hasn't shipped yet. Pin your SDK version and upgrade deliberately.
+3. **Rate limit.** Sudden `rate_limit` spikes usually mean a batch job or retry storm. Add jitter and batch with `flush()` less frequently.
+4. **Oversize payloads.** Long prompts or tool-call results will trip `payload_too_large`. Redact or truncate before tracing.
+5. **Schema mismatch from hand-rolled HTTP.** If you're not using the SDK, you're on your own for schema drift. Use the SDK.
+
+### Ingest lag high but errors low
+
+Your spans are landing, just slowly. Check:
+
+- Are you calling `flush()` synchronously on a hot path? Move it off the request path.
+- Is your network egress congested? `p95` is usually dominated by client-side network, not our ingest.
+- Is it a specific region? If so, ping support — we may have a regional hot spot.
+
+### Last successful span is stale
+
+Even if overall counts look fine, a stale **Last successful span** timestamp for this project means nothing recent has landed. Likely:
+
+- Project-scoped API key revoked — check **Settings** → **API keys**.
+- App stopped running (container crashed, cron paused). Check your own deploy logs.
+- SDK buffer stuck — if your app is running but not flushing, look for errors in the SDK's own logs.
