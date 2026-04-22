@@ -5,7 +5,7 @@ description: "Automated actions, policies, HITL approvals, and the kill-switch."
 
 The **Control** page is TruLayer's closed-loop surface: define what should happen when a trace matches a condition (retry, fall back to a safer model, block the response, or escalate to a human), roll actions out gradually, and pull the emergency brake if something goes wrong.
 
-![screenshot: Control overview with active policies](../images/dashboard-control-overview.png)
+{/* screenshot: Control overview with active policies (TODO) */}
 
 ## Control actions
 
@@ -24,7 +24,7 @@ Actions are invoked at response time by the TruLayer SDK when a policy matches. 
 
 Policies glue triggers to actions. Create one from **Control → Policies → New policy**.
 
-![screenshot: Policy form with trigger and action](../images/dashboard-control-policy-form.png)
+{/* screenshot: Policy form with trigger and action (TODO) */}
 
 Fields:
 
@@ -44,7 +44,7 @@ Every policy evaluation records a `policy_evaluation` event on the trace so you 
 
 **Control → Kill-switch** is an owner-only emergency halt.
 
-![screenshot: Kill-switch confirmation modal](../images/dashboard-control-kill-switch.png)
+{/* screenshot: Kill-switch confirmation modal (TODO) */}
 
 When engaged:
 
@@ -59,7 +59,7 @@ Use it when a bad policy is causing more harm than the underlying issue. Release
 
 **Control → HITL** shows pending approvals.
 
-![screenshot: HITL queue with pending approvals](../images/dashboard-control-hitl.png)
+{/* screenshot: HITL queue with pending approvals (TODO) */}
 
 - **Queue** — one row per trace that hit an `escalate` action, with the original input, the proposed output, and the triggering policy. Sorted oldest-first.
 - **Approve** / **Reject** — Approving releases the output to the end user; rejecting sends the configured block response and attaches the reject reason to the trace as metadata. Both actions are logged.
