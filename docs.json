@@ -103,7 +103,8 @@
           {
             "group": "Reference",
             "pages": [
-              "glossary"
+              "glossary",
+              "sla"
             ]
           },
           {

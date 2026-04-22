@@ -1,0 +1,98 @@
+---
+title: "Service Level Agreement"
+description: "TruLayer's uptime commitment, service credits, and per-component fail-mode behaviour."
+---
+
+TruLayer commits to keeping your AI reliability platform available when you need it. This page documents the uptime target, how service credits work, and — just as importantly — what happens to your application when a TruLayer component is unreachable.
+
+For the live, minute-by-minute status of every public component (Ingest API, Dashboard, Eval Engine, Control Engine, Auth), see [status.trulayer.ai](https://status.trulayer.ai).
+
+## Uptime target
+
+**99.9% monthly uptime** for the Pro and Team plans, measured against a calendar month.
+
+"Uptime" means the TruLayer Ingest API and Dashboard are reachable and returning non-5xx responses from at least one region. A month with 99.9% uptime allows up to **~43 minutes 12 seconds** of cumulative downtime before service credits apply.
+
+The Free plan is offered as-is with no uptime commitment, though we monitor and target the same availability in practice.
+
+## Service credits
+
+If TruLayer's measured monthly uptime for a Pro or Team tenant falls below 99.9%, that tenant is eligible for a service credit:
+
+| Monthly uptime | Credit |
+| -------------- | ------ |
+| 99.0% – 99.89% | 1 day of service credit per hour of excess downtime |
+| Below 99.0%    | 1 day of service credit per hour of excess downtime, capped at 30 days |
+
+Credits are applied to the next invoice. They are the exclusive remedy for an uptime miss. To claim a credit, contact [support@trulayer.ai](mailto:support@trulayer.ai) within 30 days of the end of the affected billing period with the impacted time window — we will verify against our observability data and apply the credit automatically.
+
+### Exclusions
+
+Uptime calculations exclude:
+
+- **Scheduled maintenance** announced at least 48 hours in advance on [status.trulayer.ai](https://status.trulayer.ai).
+- **Force majeure** events — natural disasters, regional cloud-provider outages outside our control, internet backbone incidents.
+- **Customer-caused outages** — misconfigured SDKs, exhausted plan quotas, IP-block policies set by the customer, credentials rotated without grace.
+- **Beta and preview features** explicitly labelled as such in the dashboard or docs.
+
+## Fail-mode behaviour
+
+When a TruLayer component is unreachable, each component has a documented default behaviour. Understanding these modes is critical for designing around us safely: some components **fail open** (your application continues, telemetry may be deferred or skipped) and some **fail closed** (your application is blocked, because allowing traffic through without the control would violate the contract the customer set up).
+
+### Ingest API — fail-open
+
+**Default: fail-open.** If the Ingest API is unreachable, the SDK buffers spans locally (in memory, with a bounded queue) and retries with exponential backoff. Your application continues to serve users — it just emits less telemetry until TruLayer is reachable again.
+
+- Buffer overflow drops the oldest spans first and surfaces a `trulayer.buffer_overflow` warning in SDK logs.
+- This behaviour is configurable via `TruLayer.init({ on_ingest_failure: 'throw' | 'log' })` — the default is `log`.
+
+**Rationale:** tracing is an observability tool; it must never take down the application it's observing.
+
+### Eval Engine — fail-open
+
+**Default: fail-open.** If the Eval Engine is unreachable, scheduled evaluations are skipped rather than queued indefinitely. Your application is not blocked waiting on an eval verdict.
+
+- Skipped evals are re-enqueued on the next scheduled run.
+- In-dashboard eval playgrounds surface an "Eval engine unreachable — retry" toast.
+
+**Rationale:** evals are a post-hoc quality signal, not a runtime guard. Blocking on them would amplify a TruLayer outage into a user-visible one.
+
+### Control Engine / kill-switch — fail-closed
+
+**Default: fail-closed.** If the Control Engine (policy decisions, kill-switches, model routing overrides) is unreachable, the SDK applies the **last known good policy** it cached locally, and if no cached policy exists, it falls back to the customer-configured safe default — typically "deny" for policy enforcement and "primary model only" for routing.
+
+- The SDK caches policies with a TTL (default 60s) so short Control Engine blips are invisible.
+- Long outages surface a `trulayer.control_unreachable` counter in SDK metrics so your existing alerting can page on it.
+
+**Rationale:** the Control Engine is the enforcement layer for kill-switches and safety policies. If we can't confirm a policy decision, the conservative choice is to block — letting traffic through silently defeats the entire point of having a kill-switch.
+
+### Dashboard — fail-gracefully
+
+**Default: fail-gracefully.** If the dashboard backend is unreachable, the Next.js app serves the last cached copy of pages and surfaces a non-blocking "Live data unavailable" banner. Existing data you were viewing remains readable; new queries return an error state.
+
+**Rationale:** the dashboard is a read surface — customers should still be able to read historical data and triage even during a backend blip.
+
+### Auth (Clerk) — fail-closed
+
+**Default: fail-closed.** Authentication goes through [Clerk](https://clerk.com). If Clerk is unreachable, dashboard access is denied — users cannot log in or exchange session cookies for JWTs.
+
+- SDK traffic continues unaffected: SDKs use long-lived API keys, not Clerk-issued JWTs.
+- Clerk publishes their own SLA and status page; we inherit both.
+
+**Rationale:** auth failures must deny access, not grant it. Fail-open on authentication is the single worst security posture a platform can have.
+
+### Summary
+
+| Component | Mode | What happens on outage |
+| --------- | ---- | ---------------------- |
+| Ingest API | fail-open | SDK buffers spans locally, retries with backoff |
+| Eval Engine | fail-open | Evals skipped, re-enqueued on next run |
+| Control Engine | fail-closed | Last known good policy, then safe default |
+| Dashboard | fail-graceful | Cached pages served, new queries error |
+| Auth (Clerk) | fail-closed | Dashboard access denied |
+
+## Live status
+
+Real-time status of all components is published at **[status.trulayer.ai](https://status.trulayer.ai)**. Subscribe there to receive incident notifications by email, SMS, Slack, or webhook.
+
+Post-incident reports for all Sev-1 and Sev-2 incidents are published within 5 business days to the same page.
