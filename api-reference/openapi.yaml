@@ -20,7 +20,20 @@ tags:
   - name: metrics
   - name: feedback
   - name: evals
+  - name: eval-rules
+  - name: control
   - name: apikeys
+  - name: model-routes
+  - name: datasets
+  - name: search
+  - name: anomaly
+  - name: webhooks
+  - name: failure-rules
+  - name: eval-runs
+  - name: ci
+  - name: otlp
+  - name: billing
+  - name: failures
 
 paths:
   /health:
@@ -93,6 +106,94 @@ paths:
         "429":
           $ref: "#/components/responses/RateLimited"
 
+  /v1/otlp/traces:
+    post:
+      operationId: otlpIngestTraces
+      tags: [otlp, ingest]
+      summary: OTLP/HTTP ingest endpoint (OTel GenAI semconv v1.29.0)
+      description: |
+        Accepts an OpenTelemetry `ExportTraceServiceRequest` payload, either as
+        protobuf (`application/x-protobuf`) or JSON (`application/json`). Maps
+        OTel GenAI semantic convention attributes onto TruLayer's span model
+        and routes each span through the standard ingestion pipeline
+        (Kafka → processor → TimescaleDB).
+
+        Point your OTel Collector's `otlphttp` exporter at this URL to
+        dual-ship traces to TruLayer without a second SDK.
+      requestBody:
+        required: true
+        content:
+          application/x-protobuf:
+            schema:
+              type: string
+              format: binary
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OTLPExportTraceServiceRequest"
+      responses:
+        "200":
+          description: OTLP `ExportTraceServiceResponse`. `partial_success` is populated iff one or more spans failed to persist.
+          content:
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OTLPExportTraceServiceResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          description: Request body exceeds 20 MiB
+        "415":
+          description: Unsupported Content-Type (must be application/x-protobuf or application/json)
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/otlp/export:
+    get:
+      operationId: otlpExportTraces
+      tags: [otlp, traces]
+      summary: Export traces in OTLP/HTTP JSON format
+      description: |
+        Streams traces in OTLP `TracesData` JSON format so existing OTel
+        tooling (Datadog, Honeycomb, Tempo, Jaeger) can ingest without a
+        TruLayer-specific adapter. Dashboard-only (Clerk session auth).
+        Capped at 10,000 spans per response; use the `cursor` query parameter
+        returned in the `X-Next-Cursor` response header to paginate.
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: project_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: OTLP `TracesData` payload (JSON-encoded protobuf).
+          headers:
+            X-Next-Cursor:
+              description: Opaque cursor to fetch the next page, present only when more results are available.
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OTLPTracesData"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /v1/traces:
     get:
       operationId: listTraces
@@ -108,6 +209,12 @@ paths:
         - name: error
           in: query
           schema: { type: boolean }
+        - name: failure_type
+          in: query
+          description: Filter traces with spans matching this failure type (e.g. timeout, rate_limit, invalid_response, context_length)
+          schema:
+            type: string
+            enum: [timeout, rate_limit, invalid_response, context_length]
         - name: from
           in: query
           schema: { type: string, format: date-time }
@@ -198,6 +305,35 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /v1/failures/clusters:
+    get:
+      operationId: getFailureClusters
+      tags: [failures]
+      summary: Group error traces by message prefix and return failure clusters
+      description: |
+        Groups traces that have `error=true` by their top-level error message prefix,
+        returning a ranked list of failure clusters with count, first/last seen timestamps,
+        and a sample of trace IDs from each cluster. Used by the dashboard Failure clustering view.
+      parameters:
+        - name: project_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Failure clusters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureClustersResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /v1/eval:
     post:
       operationId: triggerEval
@@ -220,6 +356,24 @@ paths:
           $ref: "#/components/responses/NotFound"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: |
+            Monthly eval quota exceeded. Returned for starter-plan tenants
+            that have hit their `EvalsPerMonth` cap. Pro/Team tenants are
+            never hard-blocked here — their overage is metered and billed.
+            Clients should distinguish this from generic rate-limiting via
+            the `code` field (`eval_quota_exceeded`).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, error]
+                properties:
+                  code:
+                    type: string
+                    enum: [eval_quota_exceeded]
+                  error:
+                    type: string
     get:
       operationId: listEvals
       tags: [evals]
@@ -263,6 +417,412 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /v1/eval/trends:
+    get:
+      operationId: getEvalTrends
+      tags: [evals]
+      summary: Get time-bucketed eval score averages per metric
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: metric
+          in: query
+          schema: { type: string }
+          description: Filter by a single metric name
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+          description: Start of time range (default last 7 days)
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+          description: End of time range (default now)
+        - name: bucket
+          in: query
+          schema:
+            type: string
+            enum: [1h, 6h, 1d, 7d]
+          description: Bucket size (default auto based on range)
+      responses:
+        "200":
+          description: Eval trend buckets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalTrendsResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/eval/histogram:
+    get:
+      operationId: getEvalHistogram
+      tags: [evals]
+      summary: Get score distribution histogram for a metric
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: metric
+          in: query
+          required: true
+          schema: { type: string }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: buckets
+          in: query
+          schema: { type: integer, default: 10, minimum: 1, maximum: 100 }
+          description: Number of histogram buckets
+      responses:
+        "200":
+          description: Score distribution histogram
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalHistogramResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/eval/compare:
+    get:
+      operationId: compareEvalWindows
+      tags: [evals]
+      summary: Compare eval metrics between two time windows
+      parameters:
+        - name: project_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: metric
+          in: query
+          required: true
+          schema: { type: string }
+        - name: baseline_from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: baseline_to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: candidate_from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: candidate_to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Comparison result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalCompareResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/eval-catalog:
+    get:
+      operationId: listEvalCatalog
+      tags: [eval]
+      summary: List pre-built LLM evaluators available for use
+      description: |
+        Returns the static catalog of TruLayer's pre-built LLM-judge evaluators.
+        This endpoint is public (no auth required) so SDKs and dashboards can
+        render a picker before a session is established. The response is safe
+        to cache aggressively. Use a catalog entry by passing its name as
+        `config.preset` when triggering an eval (`POST /v1/eval`).
+      security: []
+      responses:
+        "200":
+          description: Catalog entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalCatalogResponse"
+
+  /v1/eval-rules:
+    get:
+      operationId: listEvalRules
+      tags: [eval-rules]
+      summary: List eval rules for the tenant
+      parameters:
+        - name: project_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Eval rules list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalRuleListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createEvalRule
+      tags: [eval-rules]
+      summary: Create an eval rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEvalRuleRequest"
+      responses:
+        "201":
+          description: Eval rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/eval-rules/{id}:
+    patch:
+      operationId: updateEvalRule
+      tags: [eval-rules]
+      summary: Update an eval rule (partial update)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEvalRuleRequest"
+      responses:
+        "200":
+          description: Eval rule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      operationId: deleteEvalRule
+      tags: [eval-rules]
+      summary: Delete an eval rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Eval rule deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/failure-rules:
+    get:
+      operationId: listFailureRules
+      tags: [failure-rules]
+      summary: List failure detection rules for the tenant
+      responses:
+        "200":
+          description: Failure rules list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureRuleListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createFailureRule
+      tags: [failure-rules]
+      summary: Create a failure detection rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFailureRuleRequest"
+      responses:
+        "201":
+          description: Failure rule created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/failure-rules/{id}:
+    get:
+      operationId: getFailureRule
+      tags: [failure-rules]
+      summary: Get a single failure detection rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Failure rule detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureRule"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      operationId: updateFailureRule
+      tags: [failure-rules]
+      summary: Update a failure detection rule (partial update)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFailureRuleRequest"
+      responses:
+        "200":
+          description: Failure rule updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FailureRule"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      operationId: deleteFailureRule
+      tags: [failure-rules]
+      summary: Delete a failure detection rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Failure rule deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/traces/live:
+    get:
+      operationId: liveTraceFeed
+      tags: [traces]
+      summary: WebSocket endpoint for live trace events
+      description: |
+        Upgrades to WebSocket. After upgrade the server subscribes to a
+        Redis pub/sub channel for the authenticated tenant and forwards
+        each new trace event as a JSON WebSocket frame. The client does
+        not need to send any messages after the upgrade.
+      responses:
+        "101":
+          description: Switching Protocols — WebSocket upgrade successful
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/control/execute:
+    post:
+      operationId: executeControlAction
+      tags: [control]
+      summary: Execute a control action (retry, fallback model, or prompt modification)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExecuteControlActionRequest"
+      responses:
+        "201":
+          description: Control action created and executed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlAction"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/control/actions:
+    get:
+      operationId: listControlActions
+      tags: [control]
+      summary: List control actions for the tenant
+      parameters:
+        - name: trace_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: Control action list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlActionListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /v1/apikeys:
     post:
       operationId: createAPIKey
@@ -303,6 +863,356 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /v1/datasets:
+    get:
+      operationId: listDatasets
+      tags: [datasets]
+      summary: List datasets for the authenticated tenant
+      responses:
+        "200":
+          description: Dataset list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createDataset
+      tags: [datasets]
+      summary: Create a new dataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDatasetRequest"
+      responses:
+        "201":
+          description: Dataset created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dataset"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/datasets/{id}:
+    get:
+      operationId: getDataset
+      tags: [datasets]
+      summary: Get a single dataset by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Dataset detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dataset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      operationId: deleteDataset
+      tags: [datasets]
+      summary: Delete a dataset and its items
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Dataset deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/datasets/{id}/items:
+    get:
+      operationId: listDatasetItems
+      tags: [datasets]
+      summary: List items for a dataset with cursor-based pagination
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Dataset items list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetItemListResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: addDatasetItem
+      tags: [datasets]
+      summary: Add an item to a dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddDatasetItemRequest"
+      responses:
+        "201":
+          description: Item added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/datasets/{id}/items/{itemId}:
+    patch:
+      operationId: patchDatasetItem
+      tags: [datasets]
+      summary: Update a dataset item's label
+      description: |
+        Updates the `label` on a single dataset item. Used by the dashboard to
+        toggle inline labels while reviewing a dataset. Pass `null` (or omit
+        the field) to clear the label back to unlabeled.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchDatasetItemRequest"
+      responses:
+        "200":
+          description: Dataset item updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/model-routes:
+    get:
+      operationId: listModelRoutes
+      tags: [model-routes]
+      summary: List model routes for the tenant
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 200 }
+      responses:
+        "200":
+          description: Model routes list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelRouteListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createModelRoute
+      tags: [model-routes]
+      summary: Create a model route
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateModelRouteRequest"
+      responses:
+        "201":
+          description: Model route created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelRoute"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/model-routes/{id}:
+    patch:
+      operationId: updateModelRoute
+      tags: [model-routes]
+      summary: Update a model route (partial update)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateModelRouteRequest"
+      responses:
+        "200":
+          description: Model route updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelRoute"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      operationId: deleteModelRoute
+      tags: [model-routes]
+      summary: Delete a model route
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Model route deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/search/spans:
+    post:
+      operationId: searchSpans
+      tags: [search]
+      summary: Find spans semantically similar to a query vector
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpanSearchRequest"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpanSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/webhooks:
+    get:
+      operationId: listWebhooks
+      tags: [webhooks]
+      summary: List webhooks for the tenant
+      responses:
+        "200":
+          description: Webhook list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createWebhook
+      tags: [webhooks]
+      summary: Create a webhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWebhookRequest"
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/webhooks/{id}:
+    delete:
+      operationId: deleteWebhook
+      tags: [webhooks]
+      summary: Delete a webhook (owner only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Webhook deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /v1/apikeys/{id}:
     delete:
       operationId: revokeAPIKey
@@ -322,6 +1232,370 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+
+  /v1/anomalies:
+    get:
+      operationId: listAnomalies
+      tags: [anomaly]
+      summary: List detected anomalies for the tenant
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50, minimum: 1, maximum: 100 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        "200":
+          description: Anomaly list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnomalyListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/anomalies/{id}:
+    get:
+      operationId: getAnomaly
+      tags: [anomaly]
+      summary: Get a single anomaly by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Anomaly detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Anomaly"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ── Eval Runs ──────────────────────────────────────────────────────────────
+
+  /v1/datasets/{id}/versions:
+    post:
+      operationId: createEvalVersion
+      tags: [eval-runs]
+      summary: Create an eval version for a dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEvalVersionRequest"
+      responses:
+        "201":
+          description: Version created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalVersion"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      operationId: listEvalVersions
+      tags: [eval-runs]
+      summary: List eval versions for a dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: List of versions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalVersionListResponse"
+
+  /v1/datasets/{id}/runs:
+    post:
+      operationId: scheduleEvalRun
+      tags: [eval-runs]
+      summary: Schedule an eval run against a dataset version
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleEvalRunRequest"
+      responses:
+        "202":
+          description: Run scheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    get:
+      operationId: listEvalRuns
+      tags: [eval-runs]
+      summary: List eval runs for a dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: offset
+          in: query
+          schema: { type: integer, default: 0 }
+      responses:
+        "200":
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalRunListResponse"
+
+  /v1/eval-runs/{id}:
+    get:
+      operationId: getEvalRun
+      tags: [eval-runs]
+      summary: Get eval run status and progress
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Run detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/eval-runs/{id}/diff:
+    get:
+      operationId: getEvalRunDiff
+      tags: [eval-runs]
+      summary: Score diff between two eval runs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: baseline
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Diff result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalRunDiff"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── CI Gate ────────────────────────────────────────────────────────────────
+
+  /v1/settings/eval-keys:
+    get:
+      operationId: listEvalKeys
+      tags: [eval-keys]
+      summary: List active BYOK keys for premium eval models
+      description: |
+        Returns the active (non-revoked) provider keys for the tenant.
+        The raw key material is never returned — only provider and
+        creation metadata.
+      responses:
+        "200":
+          description: List of active BYOK keys
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalKeyListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: upsertEvalKey
+      tags: [eval-keys]
+      summary: Create or replace the BYOK key for a provider
+      description: |
+        Stores an encrypted copy of the provider API key. If a key for
+        the same provider already exists it is revoked atomically so
+        there is never more than one active key per (tenant, provider).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertEvalKeyRequest"
+      responses:
+        "201":
+          description: BYOK key stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvalKey"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/settings/eval-keys/{provider}:
+    delete:
+      operationId: revokeEvalKey
+      tags: [eval-keys]
+      summary: Revoke the BYOK key for a provider
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [openai, anthropic]
+      responses:
+        "204":
+          description: Key revoked
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /v1/settings/billing/checkout:
+    post:
+      operationId: createBillingCheckout
+      tags: [billing]
+      summary: Create a Stripe Checkout session for a plan upgrade
+      description: |
+        Creates a Stripe Checkout session for the specified paid plan.
+        Owner-only. Starter is rejected — free plans never require a
+        checkout session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillingCheckoutRequest"
+      responses:
+        "200":
+          description: Checkout session URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingCheckoutResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/settings/billing/portal:
+    post:
+      operationId: createBillingPortal
+      tags: [billing]
+      summary: Create a Stripe Billing Portal session
+      description: |
+        Creates a Stripe Customer Portal session so the owner can manage
+        their subscription. Returns 422 if there is no active
+        subscription for the tenant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillingPortalRequest"
+      responses:
+        "200":
+          description: Portal session URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPortalResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+  /v1/settings/invoices:
+    get:
+      operationId: listBillingInvoices
+      tags: [billing]
+      summary: List recent Stripe invoices for the tenant
+      description: |
+        Returns up to 24 recent Stripe invoices for the authenticated
+        tenant's Stripe customer, newest first. Tenants on Starter (no
+        Stripe customer yet) receive an empty list rather than a 404.
+      responses:
+        "200":
+          description: Invoice history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingInvoicesResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/ci/gate:
+    post:
+      operationId: ciGate
+      tags: [ci]
+      summary: Evaluate an eval run against a CI policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CIGateRequest"
+      responses:
+        "200":
+          description: Gate decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CIGateResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
   securitySchemes:
@@ -356,6 +1630,16 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
+    UnprocessableEntity:
+      description: Request understood but cannot be processed in the current state
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
 
   schemas:
     ErrorResponse:
@@ -370,6 +1654,88 @@ components:
       properties:
         status: { type: string, example: ok }
         time: { type: string, format: date-time }
+
+    # ── OTLP / OpenTelemetry (TRU-40) ────────────────────────────────────────────
+    # Documented here as loose JSON schemas. The wire format is the official
+    # OTLP protobuf — see go.opentelemetry.io/proto/otlp v1.10+ for the
+    # authoritative types. GenAI semconv attributes are pinned to v1.29.0.
+
+    OTLPExportTraceServiceRequest:
+      type: object
+      description: OTLP ExportTraceServiceRequest — passthrough of the OTel protobuf shape.
+      properties:
+        resourceSpans:
+          type: array
+          items:
+            $ref: "#/components/schemas/OTLPResourceSpans"
+
+    OTLPExportTraceServiceResponse:
+      type: object
+      properties:
+        partialSuccess:
+          type: object
+          properties:
+            rejectedSpans: { type: integer, format: int64 }
+            errorMessage: { type: string }
+
+    OTLPTracesData:
+      type: object
+      properties:
+        resourceSpans:
+          type: array
+          items:
+            $ref: "#/components/schemas/OTLPResourceSpans"
+
+    OTLPResourceSpans:
+      type: object
+      properties:
+        resource:
+          type: object
+          properties:
+            attributes:
+              type: array
+              items: { $ref: "#/components/schemas/OTLPKeyValue" }
+        scopeSpans:
+          type: array
+          items:
+            $ref: "#/components/schemas/OTLPScopeSpans"
+        schemaUrl: { type: string }
+
+    OTLPScopeSpans:
+      type: object
+      properties:
+        scope:
+          type: object
+          properties:
+            name: { type: string }
+            version: { type: string }
+        spans:
+          type: array
+          items:
+            $ref: "#/components/schemas/OTLPSpan"
+        schemaUrl: { type: string }
+
+    OTLPSpan:
+      type: object
+      properties:
+        traceId: { type: string, description: 128-bit trace id, base64 or hex per OTel transport }
+        spanId: { type: string, description: 64-bit span id, base64 or hex per OTel transport }
+        parentSpanId: { type: string }
+        name: { type: string }
+        startTimeUnixNano: { type: string, format: int64 }
+        endTimeUnixNano: { type: string, format: int64 }
+        attributes:
+          type: array
+          items: { $ref: "#/components/schemas/OTLPKeyValue" }
+
+    OTLPKeyValue:
+      type: object
+      properties:
+        key: { type: string }
+        value:
+          type: object
+          description: OTel AnyValue — one of stringValue, intValue, boolValue, doubleValue, arrayValue, kvlistValue, bytesValue.
+          additionalProperties: true
 
     # ── Ingestion ────────────────────────────────────────────────────────────────
 
@@ -487,12 +1853,17 @@ components:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
         session_id: { type: string, nullable: true }
+        external_id: { type: string, nullable: true }
         name: { type: string, nullable: true }
         input: { type: string, nullable: true }
         output: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        latency_ms: { type: integer, nullable: true }
+        cost: { type: number, nullable: true }
         error: { type: boolean }
         tags: { type: array, items: { type: string } }
         metadata: { type: object, additionalProperties: true }
+        span_count: { type: integer }
         spans:
           type: array
           items: { $ref: "#/components/schemas/Span" }
@@ -576,6 +1947,267 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Evaluation" }
 
+    # ── Eval Analytics ───────────────────────────────────────────────────────────
+
+    EvalTrendBucket:
+      type: object
+      required: [time, metric, avg_score, count, pass_rate]
+      properties:
+        time: { type: string, format: date-time }
+        metric: { type: string }
+        avg_score: { type: number }
+        count: { type: integer }
+        pass_rate: { type: number, description: "Fraction 0-1 of evals with score >= 0.5" }
+
+    EvalTrendsResponse:
+      type: object
+      required: [buckets]
+      properties:
+        buckets:
+          type: array
+          items: { $ref: "#/components/schemas/EvalTrendBucket" }
+
+    EvalHistogramBucket:
+      type: object
+      required: [range_start, range_end, count]
+      properties:
+        range_start: { type: number }
+        range_end: { type: number }
+        count: { type: integer }
+
+    EvalHistogramResponse:
+      type: object
+      required: [metric, buckets]
+      properties:
+        metric: { type: string }
+        buckets:
+          type: array
+          items: { $ref: "#/components/schemas/EvalHistogramBucket" }
+
+    EvalCompareWindow:
+      type: object
+      required: [avg_score, count, pass_rate]
+      properties:
+        avg_score: { type: number }
+        count: { type: integer }
+        pass_rate: { type: number }
+
+    EvalCompareDelta:
+      type: object
+      required: [avg_score, pass_rate]
+      properties:
+        avg_score: { type: number }
+        pass_rate: { type: number }
+
+    EvalCompareResponse:
+      type: object
+      required: [metric, baseline, candidate, delta]
+      properties:
+        metric: { type: string }
+        baseline: { $ref: "#/components/schemas/EvalCompareWindow" }
+        candidate: { $ref: "#/components/schemas/EvalCompareWindow" }
+        delta: { $ref: "#/components/schemas/EvalCompareDelta" }
+
+    # ── Eval Rules ───────────────────────────────────────────────────────────────
+
+    EvalRule:
+      type: object
+      required: [id, tenant_id, project_id, metric_name, evaluator_type, enabled, model_tier, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        metric_name: { type: string }
+        evaluator_type:
+          type: string
+          enum: [llm, rule]
+        config: { type: object, additionalProperties: true, nullable: true }
+        enabled: { type: boolean }
+        model_tier:
+          type: string
+          enum: [cheap, premium]
+          default: cheap
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    EvalRuleListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/EvalRule" }
+
+    EvalCatalogEntry:
+      type: object
+      required: [name, description, tags, cost_tier, example_input, example_output]
+      properties:
+        name:
+          type: string
+          description: Stable identifier used as `config.preset` when triggering an eval.
+        description: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+          description: One or more of quality, safety, retrieval, tool-use.
+        cost_tier:
+          type: string
+          enum: [low, medium, high]
+        example_input: { type: string }
+        example_output: { type: string }
+
+    EvalCatalogResponse:
+      type: object
+      required: [evaluators]
+      properties:
+        evaluators:
+          type: array
+          items: { $ref: "#/components/schemas/EvalCatalogEntry" }
+
+    CreateEvalRuleRequest:
+      type: object
+      required: [project_id, metric_name, evaluator_type]
+      properties:
+        project_id: { type: string, format: uuid }
+        metric_name: { type: string }
+        evaluator_type:
+          type: string
+          enum: [llm, rule]
+        config: { type: object, additionalProperties: true, nullable: true }
+        enabled: { type: boolean, default: true }
+        model_tier:
+          type: string
+          enum: [cheap, premium]
+          default: cheap
+
+    UpdateEvalRuleRequest:
+      type: object
+      properties:
+        enabled: { type: boolean, nullable: true }
+        metric_name: { type: string, nullable: true }
+        config: { type: object, additionalProperties: true, nullable: true }
+        model_tier:
+          type: string
+          enum: [cheap, premium]
+          nullable: true
+
+    # ── Eval Keys (BYOK) ─────────────────────────────────────────────────────────
+
+    EvalKey:
+      type: object
+      required: [id, provider, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        provider:
+          type: string
+          enum: [openai, anthropic]
+        created_at: { type: string, format: date-time }
+
+    EvalKeyListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/EvalKey" }
+
+    UpsertEvalKeyRequest:
+      type: object
+      required: [provider, key]
+      properties:
+        provider:
+          type: string
+          enum: [openai, anthropic]
+        key:
+          type: string
+          description: Raw provider API key. Stored AES-256-GCM encrypted; never returned.
+
+    # ── Failure Rules ────────────────────────────────────────────────────────────
+
+    FailureRule:
+      type: object
+      required: [id, tenant_id, name, metric, operator, threshold, window_secs, severity, enabled, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        name: { type: string }
+        metric:
+          type: string
+          enum: [error_rate, latency_p99, latency_p95, score]
+        operator:
+          type: string
+          enum: [gt, gte, lt, lte]
+        threshold: { type: number }
+        window_secs: { type: integer, default: 300 }
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+          default: medium
+        enabled: { type: boolean, default: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    FailureRuleListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/FailureRule" }
+
+    CreateFailureRuleRequest:
+      type: object
+      required: [name, metric, operator, threshold]
+      properties:
+        name: { type: string }
+        metric:
+          type: string
+          enum: [error_rate, latency_p99, latency_p95, score]
+        operator:
+          type: string
+          enum: [gt, gte, lt, lte]
+        threshold: { type: number }
+        window_secs: { type: integer, default: 300 }
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+          default: medium
+        enabled: { type: boolean, default: true }
+
+    UpdateFailureRuleRequest:
+      type: object
+      properties:
+        name: { type: string, nullable: true }
+        metric:
+          type: string
+          enum: [error_rate, latency_p99, latency_p95, score]
+          nullable: true
+        operator:
+          type: string
+          enum: [gt, gte, lt, lte]
+          nullable: true
+        threshold: { type: number, nullable: true }
+        window_secs: { type: integer, nullable: true }
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+          nullable: true
+        enabled: { type: boolean, nullable: true }
+
+    # ── Live Trace Events ────────────────────────────────────────────────────────
+
+    LiveTraceEvent:
+      type: object
+      required: [trace_id, name, status, latency_ms, created_at]
+      properties:
+        trace_id: { type: string, format: uuid }
+        name: { type: string }
+        status:
+          type: string
+          enum: [ok, error]
+        latency_ms: { type: integer }
+        created_at: { type: string, format: date-time }
+
     # ── API Keys ─────────────────────────────────────────────────────────────────
 
     CreateAPIKeyRequest:
@@ -604,3 +2236,552 @@ components:
         created_at: { type: string, format: date-time }
         last_used_at: { type: string, format: date-time, nullable: true }
         revoked_at: { type: string, format: date-time, nullable: true }
+        created_by_email: { type: string, nullable: true }
+        created_by_first_name: { type: string, nullable: true }
+        created_by_last_name: { type: string, nullable: true }
+
+    # ── Datasets ────────────────────────────────────────────────────────────────
+
+    CreateDatasetRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+
+    Dataset:
+      type: object
+      required: [id, tenant_id, name, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    DatasetListResponse:
+      type: object
+      required: [datasets]
+      properties:
+        datasets:
+          type: array
+          items: { $ref: "#/components/schemas/Dataset" }
+
+    DatasetItemListResponse:
+      type: object
+      required: [items, has_more]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/DatasetItem" }
+        next_cursor: { type: string, nullable: true }
+        has_more: { type: boolean }
+
+    AddDatasetItemRequest:
+      type: object
+      required: [trace_id]
+      properties:
+        trace_id: { type: string, format: uuid }
+        span_id: { type: string, format: uuid, nullable: true }
+        feedback_id: { type: string, format: uuid, nullable: true }
+        label: { type: string, nullable: true }
+
+    DatasetItem:
+      type: object
+      required: [id, dataset_id, tenant_id, trace_id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        dataset_id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        trace_id: { type: string, format: uuid }
+        span_id: { type: string, format: uuid, nullable: true }
+        feedback_id: { type: string, format: uuid, nullable: true }
+        label:
+          type: string
+          nullable: true
+          enum: [pass, fail, unlabeled, null]
+          description: |
+            Review label for the item. `null` (or omitted) means the item has
+            not been labeled yet. The frontend toggles this value via
+            `PATCH /v1/datasets/{id}/items/{itemId}`.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    PatchDatasetItemRequest:
+      type: object
+      description: |
+        Mutation body for `PATCH /v1/datasets/{id}/items/{itemId}`. Only the
+        `label` field is accepted. Pass `null` or omit the field to clear the
+        label back to unlabeled.
+      properties:
+        label:
+          type: string
+          nullable: true
+          enum: [pass, fail, unlabeled, null]
+
+    # ── Control Actions ────��────────────────────────────────────────────────────
+
+    ExecuteControlActionRequest:
+      type: object
+      required: [project_id, action_type]
+      properties:
+        project_id: { type: string, format: uuid }
+        trace_id: { type: string, format: uuid, nullable: true }
+        rule_id: { type: string, format: uuid, nullable: true }
+        action_type:
+          type: string
+          enum: [retry, fallback_model, prompt_modification, agent_action]
+        payload: { type: object, additionalProperties: true, nullable: true }
+
+    ControlAction:
+      type: object
+      required: [id, tenant_id, project_id, action_type, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        trace_id: { type: string, format: uuid, nullable: true }
+        rule_id: { type: string, format: uuid, nullable: true }
+        action_type:
+          type: string
+          enum: [retry, fallback_model, prompt_modification, agent_action]
+        status:
+          type: string
+          enum: [pending, executed, failed]
+        payload: { type: object, additionalProperties: true, nullable: true }
+        result: { type: object, additionalProperties: true, nullable: true }
+        executed_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ControlActionListResponse:
+      type: object
+      required: [actions, has_more]
+      properties:
+        actions:
+          type: array
+          items: { $ref: "#/components/schemas/ControlAction" }
+        next_cursor: { type: string, nullable: true }
+        has_more: { type: boolean }
+
+    # ── Model Routes ────────────────────────────────────────────────���─────────
+
+    ModelRouteCondition:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [latency_threshold, error_rate, cost_threshold, always]
+        threshold: { type: number, nullable: true }
+        window_minutes: { type: integer, nullable: true }
+
+    ModelRouteAction:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [fallback_model, block, log_only]
+        model: { type: string, nullable: true }
+
+    ModelRoute:
+      type: object
+      required: [id, tenant_id, name, condition, action, priority, enabled, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        condition: { $ref: "#/components/schemas/ModelRouteCondition" }
+        action: { $ref: "#/components/schemas/ModelRouteAction" }
+        priority: { type: integer }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ModelRouteListResponse:
+      type: object
+      required: [items, has_more]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ModelRoute" }
+        next_cursor: { type: string, nullable: true }
+        has_more: { type: boolean }
+
+    CreateModelRouteRequest:
+      type: object
+      required: [name, condition, action]
+      properties:
+        name: { type: string }
+        description: { type: string, nullable: true }
+        condition: { $ref: "#/components/schemas/ModelRouteCondition" }
+        action: { $ref: "#/components/schemas/ModelRouteAction" }
+        priority: { type: integer, default: 100 }
+        enabled: { type: boolean, default: true }
+
+    UpdateModelRouteRequest:
+      type: object
+      properties:
+        name: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        condition: { $ref: "#/components/schemas/ModelRouteCondition" }
+        action: { $ref: "#/components/schemas/ModelRouteAction" }
+        priority: { type: integer, nullable: true }
+        enabled: { type: boolean, nullable: true }
+
+    # ── Search ──────────────────────────────────────────────────────────────────
+
+    SpanSearchRequest:
+      type: object
+      required: [query_vector, project_id]
+      properties:
+        query_vector:
+          type: array
+          items: { type: number, format: float }
+          description: "Float32 array, 1536 dimensions (OpenAI ada-002)"
+        project_id: { type: string, format: uuid }
+        limit: { type: integer, default: 10, minimum: 1, maximum: 100 }
+        threshold: { type: number, default: 0.7, minimum: 0, maximum: 1, description: "Cosine similarity threshold" }
+
+    SpanSearchResult:
+      type: object
+      required: [span_id, trace_id, similarity, span_name, span_type, created_at]
+      properties:
+        span_id: { type: string, format: uuid }
+        trace_id: { type: string, format: uuid }
+        similarity: { type: number }
+        span_name: { type: string }
+        span_type: { type: string }
+        created_at: { type: string, format: date-time }
+
+    SpanSearchResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/SpanSearchResult" }
+
+    # ── Webhooks ────────────────────────────────────────────────────────────────
+
+    Webhook:
+      type: object
+      required: [id, tenant_id, url, events, enabled, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateWebhookRequest:
+      type: object
+      required: [url, secret]
+      properties:
+        url: { type: string, format: uri }
+        secret: { type: string, minLength: 16, description: "HMAC secret for signature verification" }
+        events:
+          type: array
+          items: { type: string }
+          default: ["failure.detected"]
+        enabled: { type: boolean, default: true }
+
+    WebhookListResponse:
+      type: object
+      required: [webhooks]
+      properties:
+        webhooks:
+          type: array
+          items: { $ref: "#/components/schemas/Webhook" }
+
+    # ── Anomalies ──────────────────────────────────────────────────────────────
+
+    Anomaly:
+      type: object
+      required: [id, tenant_id, type, severity, description, detected_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [latency_spike, error_rate_spike, volume_anomaly]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        description: { type: string }
+        trace_id: { type: string, format: uuid, nullable: true }
+        detected_at: { type: string, format: date-time }
+        metadata: { type: object, additionalProperties: true, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    AnomalyListResponse:
+      type: object
+      required: [anomalies]
+      properties:
+        anomalies:
+          type: array
+          items: { $ref: "#/components/schemas/Anomaly" }
+
+    # ── Eval Runs ──────────────────────────────────────────────────────────────
+
+    EvalVersion:
+      type: object
+      required: [id, tenant_id, dataset_id, name, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        dataset_id: { type: string, format: uuid }
+        name: { type: string }
+        system_prompt: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        judge_model: { type: string, nullable: true }
+        metadata: { type: object, additionalProperties: true, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    CreateEvalVersionRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        system_prompt: { type: string }
+        model: { type: string }
+        judge_model: { type: string }
+
+    EvalVersionListResponse:
+      type: object
+      required: [versions]
+      properties:
+        versions:
+          type: array
+          items: { $ref: "#/components/schemas/EvalVersion" }
+
+    EvalRun:
+      type: object
+      required: [id, tenant_id, dataset_id, eval_version_id, status, item_count, completed_count, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        dataset_id: { type: string, format: uuid }
+        eval_version_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        item_count: { type: integer }
+        completed_count: { type: integer }
+        started_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        error_message: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    ScheduleEvalRunRequest:
+      type: object
+      required: [eval_version_id]
+      properties:
+        eval_version_id: { type: string, format: uuid }
+
+    EvalRunListResponse:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items: { $ref: "#/components/schemas/EvalRun" }
+
+    EvalRunDiff:
+      type: object
+      required: [run_id, baseline_id, summary, items]
+      properties:
+        run_id: { type: string, format: uuid }
+        baseline_id: { type: string, format: uuid }
+        summary:
+          $ref: "#/components/schemas/DiffSummary"
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/DiffItem" }
+
+    DiffSummary:
+      type: object
+      required: [mean_delta, improved_count, regressed_count, unchanged_count]
+      properties:
+        mean_delta: { type: number }
+        improved_count: { type: integer }
+        regressed_count: { type: integer }
+        unchanged_count: { type: integer }
+
+    DiffItem:
+      type: object
+      required: [trace_id, delta]
+      properties:
+        trace_id: { type: string, format: uuid }
+        label: { type: string }
+        baseline_score: { type: number, nullable: true }
+        run_score: { type: number, nullable: true }
+        delta: { type: number }
+        baseline_rationale: { type: string }
+        run_rationale: { type: string }
+
+    # ── CI Gate ────────────────────────────────────────────────────────────────
+
+    CIGateRequest:
+      type: object
+      required: [dataset_id, run_id, policy]
+      properties:
+        dataset_id: { type: string, format: uuid }
+        run_id: { type: string, format: uuid }
+        baseline_run_id: { type: string, format: uuid, nullable: true }
+        policy:
+          $ref: "#/components/schemas/CIPolicy"
+
+    CIPolicy:
+      type: object
+      required: [on_fail]
+      properties:
+        score_floor: { type: number, nullable: true }
+        delta_tolerance: { type: number, nullable: true }
+        on_fail:
+          type: string
+          enum: [warn, block]
+
+    CIGateResponse:
+      type: object
+      required: [decision, mean_score, run_url, reason]
+      properties:
+        decision:
+          type: string
+          enum: [pass, warn, block]
+        mean_score: { type: number }
+        mean_delta: { type: number, nullable: true }
+        run_url: { type: string }
+        reason: { type: string }
+
+    # ── Billing ────────────────────────────────────────────────────────────────
+
+    BillingCheckoutRequest:
+      type: object
+      required: [plan, success_url, cancel_url]
+      properties:
+        plan:
+          type: string
+          enum: [pro, team]
+          description: Target paid plan. Starter is not accepted.
+        success_url:
+          type: string
+          format: uri
+          description: Redirect target on successful checkout completion.
+        cancel_url:
+          type: string
+          format: uri
+          description: Redirect target if the user abandons checkout.
+
+    BillingCheckoutResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: Stripe-hosted checkout session URL.
+
+    BillingPortalRequest:
+      type: object
+      required: [return_url]
+      properties:
+        return_url:
+          type: string
+          format: uri
+          description: Redirect target after the user exits the portal.
+
+    BillingPortalResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: Stripe-hosted billing portal session URL.
+
+    BillingInvoice:
+      type: object
+      required:
+        - id
+        - number
+        - amount_due
+        - currency
+        - status
+        - period_start
+        - period_end
+        - invoice_pdf
+        - hosted_invoice_url
+      properties:
+        id:
+          type: string
+          description: Stripe invoice ID.
+        number:
+          type: string
+          description: Human-readable invoice number (e.g. TL-0001).
+        amount_due:
+          type: integer
+          format: int64
+          description: Amount due in the smallest currency unit (e.g. cents for USD).
+        currency:
+          type: string
+          description: ISO-4217 currency code in lowercase.
+        status:
+          type: string
+          description: |
+            Stripe invoice status. One of: draft, open, paid, void,
+            uncollectible.
+        period_start:
+          type: integer
+          format: int64
+          description: Unix timestamp (seconds) for the billing period start.
+        period_end:
+          type: integer
+          format: int64
+          description: Unix timestamp (seconds) for the billing period end.
+        invoice_pdf:
+          type: string
+          description: |
+            URL to the PDF rendering of the invoice. Empty for
+            draft/non-finalized invoices.
+        hosted_invoice_url:
+          type: string
+          description: |
+            URL to the Stripe-hosted invoice page. Empty for
+            draft/non-finalized invoices.
+
+    BillingInvoicesResponse:
+      type: object
+      required: [invoices]
+      properties:
+        invoices:
+          type: array
+          items:
+            $ref: "#/components/schemas/BillingInvoice"
+
+    # ── Failure Clusters ────────────────────────────────────────────────────────
+
+    FailureCluster:
+      type: object
+      required: [error_message, count, first_seen, last_seen, sample_ids]
+      properties:
+        error_message: { type: string }
+        count: { type: integer, format: int64 }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+        sample_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    FailureClustersResponse:
+      type: object
+      required: [clusters]
+      properties:
+        clusters:
+          type: array
+          items: { $ref: "#/components/schemas/FailureCluster" }
