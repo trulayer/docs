@@ -3,8 +3,33 @@ title: "Settings"
 description: "API keys, usage, billing, team."
 ---
 
-<Note>
-This page is a placeholder. Detailed documentation for dashboard Settings is coming soon.
-</Note>
-
 **Settings** is where you manage API keys, view usage against your plan, change billing plans, and invite team members.
+
+## API keys
+
+API keys authenticate your SDK, agents, and other clients with TruLayer. Create and revoke keys under **Settings → API keys**.
+
+### Scopes
+
+When creating a key you choose one of two scopes:
+
+- **Full access** (default) — read and write access to every TruLayer endpoint. Use this for ingestion (SDK, backend services) and for anything that writes traces, feedback, or eval runs.
+- **Query only (recommended for agents)** — read-only access to traces, evals, and metrics. Use this for MCP servers, AI agents, and any read-only analytical client. Query-only keys cannot ingest traces or mutate any resource.
+
+<Tip>
+If you are wiring TruLayer into an LLM agent or an MCP server, pick **Query only**. It limits blast radius if the key is leaked — an attacker cannot poison your trace data or revoke other keys.
+</Tip>
+
+Keys you created before scopes existed continue to work as **Full access** — no action required.
+
+### Creating a key
+
+1. Open **Settings → API keys**.
+2. Click **New Key**.
+3. Give it a descriptive name (for example `agent-production` or `ci-ingest`).
+4. Choose a scope — **Full access** or **Query only**.
+5. Click **Create**. Copy the plaintext key immediately; it is not shown again.
+
+### Revoking a key
+
+Revoking a key is immediate and cannot be undone. Revoked keys remain in the list (marked **Revoked**) so you retain an audit trail of when each key was active.
