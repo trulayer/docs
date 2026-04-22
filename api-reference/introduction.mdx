@@ -40,10 +40,10 @@ Content-Type: application/json
 
 ## Rate limits
 
-Rate limits are per tenant, enforced via a sliding window:
+Rate limits are per tenant, enforced via a fixed window (1-minute buckets):
 
-| Endpoint family | Limit (Free) | Limit (Pro) |
-| --------------- | ------------ | ----------- |
+| Endpoint family | Limit (Starter) | Limit (Pro) |
+| --------------- | --------------- | ----------- |
 | `POST /v1/ingest`, `POST /v1/ingest/batch` | 50,000 traces / month | 1,000,000 / month |
 | `POST /v1/feedback`, `POST /v1/eval` | Scales with plan | Scales with plan |
 | `GET /v1/traces`, `GET /v1/metrics` | 60 rps | 600 rps |
@@ -56,13 +56,11 @@ Errors always return a JSON body of this shape:
 
 ```json
 {
-  "error": {
-    "code": "trace_not_found",
-    "message": "Trace not found.",
-    "request_id": "req_01j..."
-  }
+  "error": "Trace not found."
 }
 ```
+
+The `error` field is a human-readable string. Machine-parseable error codes (where applicable) are returned in dedicated fields specific to each endpoint — for example, `POST /v1/eval` returns `{"code": "eval_quota_exceeded", "error": "..."}` when the monthly eval quota is exceeded.
 
 | Status | Meaning |
 | ------ | ------- |

@@ -41,15 +41,9 @@ The preview is at [http://localhost:3000](http://localhost:3000). It hot-reloads
 
 ## Keeping the API reference in sync
 
-The OpenAPI spec is the source of truth for the HTTP API reference. It lives at `api-reference/openapi.yaml` and is a **copy** of `backend/api/openapi.yaml` from the `trulayer/backend` repo.
+The OpenAPI spec is the source of truth for the HTTP API reference. It lives at `api-reference/openapi.yaml` and is kept in sync with the backend service spec.
 
-When the backend spec changes, run:
-
-```bash
-cp ../backend/api/openapi.yaml api-reference/openapi.yaml
-```
-
-…and open a PR. CI on the backend repo will flag drift automatically (see [TRU-93](https://linear.app/omnimoda/issue/TRU-93)).
+When the backend API changes, the docs team updates `api-reference/openapi.yaml` and opens a PR. Spec drift is caught automatically in CI.
 
 ## Custom ports
 
