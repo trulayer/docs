@@ -35,8 +35,88 @@ tags:
   - name: otlp
   - name: billing
   - name: failures
+  - name: compliance
 
 paths:
+  /v1/subprocessors:
+    get:
+      operationId: listSubprocessors
+      tags: [compliance]
+      security: []
+      summary: Public sub-processor registry
+      description: |
+        Returns TruLayer's current list of sub-processors as required by
+        GDPR Art. 28(2). Public — no authentication. Content is negotiated
+        via the `Accept` header:
+
+          - `application/rss+xml` (or `text/xml` / `application/xml`) →
+            RSS 2.0 feed including active sub-processors plus those
+            retired within the last 90 days.
+          - default / `application/json` → JSON envelope of active
+            sub-processors only.
+      responses:
+        "200":
+          description: Sub-processor list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubprocessorList"
+            application/rss+xml:
+              schema:
+                type: string
+                description: RSS 2.0 feed of sub-processor changes.
+
+  /v1/subprocessors/subscribe:
+    post:
+      operationId: subscribeSubprocessorChanges
+      tags: [compliance]
+      security: []
+      summary: Subscribe an email to sub-processor change notifications
+      description: |
+        Customer DPOs subscribe their email to receive 30-day advance
+        notice when a sub-processor is added or changed. Idempotent — a
+        200 response does not reveal whether the address was already
+        subscribed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscribeRequest"
+      responses:
+        "200":
+          description: Subscribed (or already subscribed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubprocessorSubscribeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /v1/subprocessors/unsubscribe:
+    post:
+      operationId: unsubscribeSubprocessorChanges
+      tags: [compliance]
+      security: []
+      summary: Unsubscribe an email from sub-processor change notifications
+      description: |
+        Idempotent — always returns 200 even when the email was never
+        subscribed, so the endpoint cannot be used to enumerate
+        subscribers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscribeRequest"
+      responses:
+        "200":
+          description: Unsubscribed (or no-op)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubprocessorSubscribeResponse"
+
   /health:
     get:
       operationId: getHealth
@@ -1688,6 +1768,41 @@ components:
       required: [error]
       properties:
         error: { type: string }
+
+    Subprocessor:
+      type: object
+      required: [id, vendor, purpose, region, effective_at]
+      properties:
+        id: { type: string, format: uuid }
+        vendor: { type: string }
+        purpose: { type: string }
+        region: { type: string }
+        dpa_url: { type: string, nullable: true }
+        effective_at: { type: string, format: date-time }
+        retired_at: { type: string, format: date-time, nullable: true }
+
+    SubprocessorList:
+      type: object
+      required: [subprocessors, updated_at]
+      properties:
+        subprocessors:
+          type: array
+          items: { $ref: "#/components/schemas/Subprocessor" }
+        updated_at: { type: string, format: date-time }
+
+    SubscribeRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    SubprocessorSubscribeResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [subscribed, unsubscribed]
 
     HealthResponse:
       type: object
