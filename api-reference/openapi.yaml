@@ -1252,6 +1252,67 @@ paths:
           $ref: "#/components/responses/Forbidden"
 
   /v1/search/spans:
+    get:
+      operationId: searchSpansText
+      tags: [search]
+      summary: Free-text semantic search over span embeddings (server-side embed)
+      description: >
+        Embeds the `q` query server-side using the tenant's configured BYOK
+        embedding key (OpenAI preferred, Anthropic fallback), then runs
+        vector similarity search over span embeddings. Designed for MCP
+        agents and other callers that cannot produce a 1536-dim vector
+        directly.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+          description: Free-form text to embed and search.
+        - name: project_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: RFC3339 lower bound on span created_at.
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+          description: RFC3339 upper bound on span created_at.
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+          description: Opaque cursor returned by a previous response.
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpanTextSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          description: Upstream embedding provider failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
     post:
       operationId: searchSpans
       tags: [search]
@@ -2642,6 +2703,17 @@ components:
         results:
           type: array
           items: { $ref: "#/components/schemas/SpanSearchResult" }
+
+    SpanTextSearchResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/SpanSearchResult" }
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page, omitted on the last page.
 
     # ── Webhooks ────────────────────────────────────────────────────────────────
 
