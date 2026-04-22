@@ -1355,7 +1355,7 @@ paths:
         Partial update — supply only the fields you want to change. Current
         supported fields are `name` (human-readable project name; also
         drives the slug) and `retention_days_override` (per-project
-        retention window; TRU-170).
+        retention window).
 
         `retention_days_override` must be between 1 and the caller's plan
         retention cap (Starter=30, Pro=90, Team=180, Enterprise=unlimited).
@@ -3246,9 +3246,9 @@ components:
           nullable: true
           minimum: 1
           description: |
-            Per-project retention override (TRU-170). When `null`, retention
-            follows the plan default; when set, must be between 1 and the
-            plan's RetentionDays cap (unbounded on Enterprise).
+            Per-project retention override. When `null`, retention follows
+            the plan default; when set, must be between 1 and the plan's
+            retention cap (unbounded on Enterprise).
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
