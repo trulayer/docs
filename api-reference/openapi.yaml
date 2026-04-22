@@ -984,6 +984,60 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /v1/projects/{id}:
+    patch:
+      operationId: patchProject
+      tags: [projects]
+      summary: Update a project (rename or adjust retention override)
+      description: |
+        Partial update — supply only the fields you want to change. Current
+        supported fields are `name` (human-readable project name; also
+        drives the slug) and `retention_days_override` (per-project
+        retention window).
+
+        `retention_days_override` must be between 1 and the caller's plan
+        retention cap (Starter=30, Pro=90, Team=180, Enterprise=unlimited).
+        Set the field to JSON `null` to clear the override and fall back to
+        the plan default. Dashboard-only — not reachable via API key.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchProjectRequest"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: |
+            Bad request — malformed body or retention override outside the
+            plan-allowed range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Project name already in use in this organization.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /v1/datasets:
     get:
       operationId: listDatasets
@@ -2475,8 +2529,35 @@ components:
         name: { type: string }
         slug: { type: string }
         archived_at: { type: string, format: date-time, nullable: true }
+        retention_days_override:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: |
+            Per-project retention override. When `null`, retention follows
+            the plan default; when set, must be between 1 and the plan's
+            retention cap (unbounded on Enterprise).
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    PatchProjectRequest:
+      type: object
+      description: |
+        Partial update payload for PATCH /v1/projects/{id}. Omit a field to
+        leave it unchanged. Supply `retention_days_override: null` to clear
+        the override back to the plan default.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        retention_days_override:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: |
+            Per-project retention window in days. Must be between 1 and the
+            caller's plan retention cap. Pass `null` to clear.
 
     ProjectListResponse:
       type: object
