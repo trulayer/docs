@@ -1204,15 +1204,23 @@ paths:
     get:
       operationId: liveTraceFeed
       tags: [traces]
-      summary: WebSocket endpoint for live trace events
+      summary: Server-Sent Events stream of live trace events
       description: |
-        Upgrades to WebSocket. After upgrade the server subscribes to a
-        Redis pub/sub channel for the authenticated tenant and forwards
-        each new trace event as a JSON WebSocket frame. The client does
-        not need to send any messages after the upgrade.
+        Opens a Server-Sent Events (SSE) stream. The server subscribes to
+        a per-tenant pub/sub channel and forwards each new trace event as
+        a `data:` frame whose payload is a JSON-encoded `LiveTraceEvent`.
+        The stream stays open until the client disconnects. The client
+        does not send any messages after opening the connection.
       responses:
-        "101":
-          description: Switching Protocols — WebSocket upgrade successful
+        "200":
+          description: SSE stream opened
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  Stream of SSE events. Each `data:` payload is a JSON
+                  `LiveTraceEvent`.
         "401":
           $ref: "#/components/responses/Unauthorized"
 
