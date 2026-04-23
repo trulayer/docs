@@ -48,7 +48,7 @@ This repo doesn't ship runtime code, so the backend/frontend "tests required" ru
 
 ### Infrastructure — pending
 
-- [ ] `package.json` with `sync-openapi` script → part of [TRU-88](https://linear.app/omnimoda/issue/TRU-88)
+- [x] `package.json` with `sync-openapi` script → part of [TRU-88](https://linear.app/omnimoda/issue/TRU-88)
 - [ ] Mintlify GitHub app installed + custom domain `docs.trulayer.ai` → [TRU-98](https://linear.app/omnimoda/issue/TRU-98)
 - [ ] Logo + favicon assets replaced with real brand files (currently starter placeholders)
 
@@ -58,7 +58,7 @@ This repo doesn't ship runtime code, so the backend/frontend "tests required" ru
 
 Pick up during a quiet window; not on the critical path for early customers.
 
-- [ ] CI on backend repo to open a PR here when `api/openapi.yaml` changes → [TRU-93](https://linear.app/omnimoda/issue/TRU-93) *(Normal — load-bearing but not urgent; stale drift affects API reference quality)*
+- [x] CI on backend repo to open a PR here when `api/openapi.yaml` changes → [TRU-93](https://linear.app/omnimoda/issue/TRU-93)
 - [ ] Docs-update rule added to `frontend/CLAUDE.md`, `backend/CLAUDE.md`, and both SDK repos → [TRU-97](https://linear.app/omnimoda/issue/TRU-97) *(Normal)*
 - [ ] Docs-update rule added to `frontend/docs/conventions.md` and `backend/docs/conventions.md`
 - [ ] PR template updated in all four repos to include a docs checklist item

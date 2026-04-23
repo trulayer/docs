@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "mint dev",
     "broken-links": "mint broken-links",
-    "sync-openapi": "cp ../backend/api/openapi.yaml api-reference/openapi.yaml && echo 'Synced: api-reference/openapi.yaml'"
+    "sync-openapi": "node -e \"require('fs').copyFileSync('../backend/api/openapi.yaml','api-reference/openapi.yaml');console.log('Synced ../backend/api/openapi.yaml -> api-reference/openapi.yaml')\""
   },
   "devDependencies": {
     "mint": "^4"
