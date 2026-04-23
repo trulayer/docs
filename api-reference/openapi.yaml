@@ -3434,6 +3434,15 @@ components:
         created_at: { type: string, format: date-time }
         last_used_at: { type: string, format: date-time, nullable: true }
         revoked_at: { type: string, format: date-time, nullable: true }
+        created_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Local user ID of the dashboard user who created the key.
+            `null` for keys created before the column was introduced, keys
+            created via API-key auth (SDK-created keys carry no user
+            identity), or keys whose creator was subsequently deleted.
         created_by_email: { type: string, nullable: true }
         created_by_first_name: { type: string, nullable: true }
         created_by_last_name: { type: string, nullable: true }
