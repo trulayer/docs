@@ -253,6 +253,14 @@ paths:
         - name: to
           in: query
           schema: { type: string, format: date-time }
+        - name: latency_min
+          in: query
+          description: Minimum trace latency in milliseconds (inclusive). Must be a non-negative integer.
+          schema: { type: integer, minimum: 0 }
+        - name: latency_max
+          in: query
+          description: Maximum trace latency in milliseconds (inclusive). Must be a non-negative integer and greater than or equal to latency_min when both are supplied.
+          schema: { type: integer, minimum: 0 }
         - name: cursor
           in: query
           schema: { type: string }
