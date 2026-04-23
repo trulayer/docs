@@ -1,0 +1,77 @@
+---
+title: "Settings — Audit Log"
+description: "Review the append-only, hash-chained audit trail for your workspace."
+---
+
+**Settings → Audit Log** is the compliance view of every sensitive
+action that has occurred in your workspace — API-key creation and
+revocation, member changes, project mutations, evaluation triggers,
+billing-plane events, trace reads, and control-plane actions.
+
+{/* screenshot: Audit log table (TODO) */}
+
+## Who can view this page
+
+The audit log is restricted to two roles:
+
+| Role    | Can view audit log |
+| ------- | :----------------: |
+| owner   |         yes        |
+| auditor |         yes        |
+| operator|          —         |
+| member  |          —         |
+| viewer  |          —         |
+
+If you land on the page without sufficient permissions, you will see a
+"You don't have permission to view the audit log" notice instead of the
+table. Ask an owner in your workspace to assign you the **auditor**
+role — intended for compliance teams and external auditors that need
+read access without mutation privileges.
+
+## Columns
+
+| Column    | What it shows |
+| --------- | ------------- |
+| Event     | Human-readable label plus the raw event id (`api_key.created`, `member.role_changed`, …). |
+| Actor     | `user`, `api_key`, or `system`, with the truncated actor UUID on hover. |
+| Resource  | UUID of the resource affected (API key id, project id, trace id, …) when applicable. |
+| Timestamp | Localised time with the full ISO-8601 UTC in the hover tooltip. |
+| Hash      | First 12 characters of the row's `curr_hash`. Hover to reveal the full SHA-256. |
+
+Click the chevron on any row to expand the typed `metadata` payload and
+confirm the `metadata_schema_version`. Fields follow the typed schema
+documented in the backend security reference.
+
+## Filtering
+
+- **Event type** — restrict the table to a single event class.
+- **From** / **To** — inclusive ISO timestamp range (input uses your
+  local timezone and is converted to UTC when the query is issued).
+
+Filter changes immediately re-fetch the first page. Use **Clear** to
+reset and return to the full stream.
+
+## Pagination
+
+The backend returns up to 50 entries per page plus an opaque
+`next_cursor`. Click **Load more** to append the next page; the table
+scrolls continuously until the cursor is exhausted.
+
+## Hash chain and tamper evidence
+
+Every entry carries a `curr_hash = sha256(prev_hash || canonical_json(entry))`.
+Together the entries form an append-only chain. TruLayer signs the
+chain head each UTC day and writes the manifest to S3 under Object Lock
+COMPLIANCE for one year — so even an attacker with database admin cannot
+rewrite history without leaving evidence.
+
+For third-party verification, fetch the daily anchor via
+`GET /v1/audit/verify?tenant_id=...&date=YYYY-MM-DD` and compare the
+manifest `head_hash` to the `curr_hash` of the last entry in the same
+window.
+
+## Exports
+
+Programmatic export is not currently exposed on this page. If you need
+a full archive for evidence collection, contact support — SOC 2 evidence
+bundles are generated out-of-band against the same underlying table.
