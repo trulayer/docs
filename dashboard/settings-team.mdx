@@ -38,6 +38,14 @@ Open the member row, pick a new role from the dropdown, confirm. The change take
 
 Suspend a member from the row menu — they lose access immediately without being removed from the workspace. Reactivate to restore previous role. Use suspend for departing employees pending full offboarding; remove only after data-access review.
 
+## Leaving an organization
+
+At the bottom of the Team page, the **Leave organization** button lets any member remove themselves. Confirming the dialog calls the API immediately — there is no grace period and the action cannot be undone. You lose access to every project, trace, eval, and dataset in the workspace as soon as the request returns.
+
+If you are the only `owner`, the server rejects the request with "You're the only owner. Promote another member before leaving." Promote another member to `owner` from the row dropdown first, then retry.
+
+On success you are returned to onboarding so you can accept a pending invite or create a new organization.
+
 ## SAML SSO (Enterprise)
 
 SAML SSO is configured through Clerk, not the TruLayer dashboard. The setup flow:
