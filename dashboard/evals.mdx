@@ -28,6 +28,16 @@ A filter bar above the results table narrows the list. All filter state lives in
 
 These map 1:1 to the query parameters on `GET /v1/eval`: `project_id`, `metric`, `score_min`, `score_max`, `from`, `to`.
 
+### Export
+
+The **Export** button at the top-right of the results table downloads the current filtered list as CSV or JSONL. Clicking it opens a small menu with:
+
+- **Include reasoning** — when checked, the LLM-judge rationale column is included (truncated to 500 characters per row). Off by default because rationales can be long and multiline, which makes CSVs unwieldy.
+- **Download as CSV** — `evals-YYYY-MM-DD.csv`.
+- **Download as JSONL** — `evals-YYYY-MM-DD.jsonl`, one JSON object per line.
+
+Row caps are per plan: 100 for Starter, 5,000 for Pro/Team/Business. If the export hits the cap, a toast appears indicating how many rows were returned and suggests either tighter filters or a plan upgrade.
+
 ## Datasets
 
 A **dataset** is a named set of trace IDs. Create one by:
