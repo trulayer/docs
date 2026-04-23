@@ -2696,10 +2696,21 @@ components:
     DsrRequestList:
       type: object
       required:
+        - items
         - requests
       properties:
+        items:
+          type: array
+          deprecated: true
+          description: |
+            Legacy alias for `requests`. Present for v1 back-compatibility only.
+            New integrations should read `requests`. This field will be removed
+            after the 12-month deprecation window closes (see `/v1/deprecations`).
+          items:
+            $ref: "#/components/schemas/DsrRequest"
         requests:
           type: array
+          description: The page of DSR rows for this tenant. Canonical key — prefer over `items`.
           items:
             $ref: "#/components/schemas/DsrRequest"
         next_cursor:
