@@ -821,10 +821,38 @@ paths:
       operationId: listEvals
       tags: [evals]
       summary: List evaluations
+      description: |
+        List evaluations for the authenticated tenant, optionally filtered.
+        All filters are optional and combine with AND semantics. Invalid
+        values return 400.
       parameters:
         - name: trace_id
           in: query
           schema: { type: string, format: uuid }
+        - name: project_id
+          in: query
+          description: Only return evaluations for this project.
+          schema: { type: string, format: uuid }
+        - name: metric
+          in: query
+          description: Exact-match filter on metric name. Empty string rejected.
+          schema: { type: string, minLength: 1 }
+        - name: from
+          in: query
+          description: RFC3339 lower bound on created_at (inclusive).
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: RFC3339 upper bound on created_at (inclusive). Must be >= from when both are set.
+          schema: { type: string, format: date-time }
+        - name: score_min
+          in: query
+          description: Lower bound on score (inclusive). 0.0-1.0.
+          schema: { type: number, format: float, minimum: 0, maximum: 1 }
+        - name: score_max
+          in: query
+          description: Upper bound on score (inclusive). 0.0-1.0. Must be >= score_min when both are set.
+          schema: { type: number, format: float, minimum: 0, maximum: 1 }
         - name: limit
           in: query
           schema: { type: integer, default: 50 }
@@ -835,6 +863,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EvalListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
