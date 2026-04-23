@@ -30,6 +30,15 @@ All filters compose. Combine freely.
 - **Tags** — if you tag traces via `metadata`, filter by tag value.
 - **Search** — full-text over trace names and input/output content (respects your scrub function — redacted fields aren't searchable).
 
+## Export
+
+The **Export** button at the top of the list downloads the current filtered set as CSV or JSONL:
+
+- **Download as CSV** — `traces-YYYY-MM-DD.csv` with columns `id, project_id, model, environment, status, duration_ms, token_count, cost_usd, created_at`.
+- **Download as JSONL** — one JSON object per line, same fields.
+
+Filters from the bar are passed through to the export endpoint, so whatever you can see on-screen is exactly what you'll get on disk. Row caps are per plan: 100 for Starter, 5,000 for Pro/Team/Business. If your export hits the cap, a toast appears indicating the cap and suggests either tighter filters or a plan upgrade.
+
 ## Trace detail
 
 Click any row to open the detail view. You'll see:
