@@ -1,0 +1,65 @@
+---
+title: "Python SDK examples"
+description: "Runnable, end-to-end Python demos that exercise the trulayer SDK against real (or mocked) LLM providers."
+---
+
+The [`demo-python`](https://github.com/trulayer/demo-python) repository contains a curated set of standalone scripts that show every public surface of the `trulayer` SDK end-to-end. Each example is intentionally small — one concept per file — so you can copy a pattern straight into your own app.
+
+<Note>
+  **Status: alpha.** The demo scripts currently pin the SDK from a local sibling path while we cut the first public release. Standalone clones will fail to install until `trulayer` 0.1.0 is on PyPI. Track the release in the [demo-python repo](https://github.com/trulayer/demo-python). Once 0.1.0 ships, this notice will be removed.
+</Note>
+
+## What's in the repo
+
+- 11 runnable examples under `examples/`, one per SDK concept (manual tracing, auto-instrumentation, RAG, agents, streaming, feedback, async, LangChain).
+- A local mock ingestion server (`examples/mock_server.py`) so you can run every example offline.
+- A pytest suite (`tests/test_examples.py`) that asserts each script's payload shape end-to-end.
+
+## Clone and run
+
+```bash
+git clone https://github.com/trulayer/demo-python.git
+cd demo-python
+cp .env.example .env      # add TRULAYER_API_KEY and provider keys
+uv sync
+uv run python -m examples.basic_trace
+```
+
+To run every example against the bundled mock server (no network, no real keys):
+
+```bash
+TRULAYER_DEMO_MOCK=1 uv run python -m examples.run_all
+```
+
+## Representative examples
+
+<CardGroup cols={2}>
+  <Card title="basic_trace.py" icon="code" href="https://github.com/trulayer/demo-python/blob/main/examples/basic_trace.py">
+    Manual `trace()` and `span()` around a real OpenAI call — the smallest possible end-to-end example.
+  </Card>
+  <Card title="openai_auto.py" icon="wand-magic-sparkles" href="https://github.com/trulayer/demo-python/blob/main/examples/openai_auto.py">
+    `instrument_openai()` — patches the client so every `chat.completions.create` becomes a span automatically.
+  </Card>
+  <Card title="rag_pipeline.py" icon="diagram-project" href="https://github.com/trulayer/demo-python/blob/main/examples/rag_pipeline.py">
+    Embed → retrieve → generate, captured as three typed spans (`retrieval`, `llm`) inside one trace.
+  </Card>
+  <Card title="agent.py" icon="robot" href="https://github.com/trulayer/demo-python/blob/main/examples/agent.py">
+    Tool-calling agent loop, with one span per tool invocation and one per LLM turn.
+  </Card>
+  <Card title="feedback.py" icon="thumbs-up" href="https://github.com/trulayer/demo-python/blob/main/examples/feedback.py">
+    Trace an answer, then attach a thumbs-up `FeedbackData` record to it via `submit_feedback()`.
+  </Card>
+</CardGroup>
+
+For the full list, see the [examples directory](https://github.com/trulayer/demo-python/tree/main/examples) on GitHub.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Tutorial" icon="graduation-cap" href="/sdks/python/tutorial">
+    Build the same patterns from scratch with a step-by-step walkthrough.
+  </Card>
+  <Card title="Reference" icon="book" href="/sdks/python/reference">
+    Every public export, with signatures and types.
+  </Card>
+</CardGroup>

@@ -1,0 +1,65 @@
+---
+title: "TypeScript SDK examples"
+description: "Runnable, end-to-end TypeScript demos that exercise @trulayer/sdk against real (or mocked) LLM providers."
+---
+
+The [`demo-typescript`](https://github.com/trulayer/demo-typescript) repository contains a curated set of standalone scripts that show every public surface of `@trulayer/sdk` end-to-end. Each example is intentionally small — one concept per file — so you can copy a pattern straight into your own app.
+
+<Note>
+  **Status: alpha.** The demo scripts currently pin the SDK from a local sibling path while we cut the first public release. Standalone clones will fail to install until `@trulayer/sdk` 0.1.0 is on npm. Track the release in the [demo-typescript repo](https://github.com/trulayer/demo-typescript). Once 0.1.0 ships, this notice will be removed.
+</Note>
+
+## What's in the repo
+
+- 11 runnable examples under `examples/`, one per SDK concept (manual tracing, auto-instrumentation, RAG, agents, streaming, feedback, Vercel AI SDK, Next.js).
+- A local mock ingestion server (`examples/mock-server.ts`) so you can run every example offline.
+- A Vitest suite (`tests/smoke.test.ts`) that asserts each script's payload shape end-to-end.
+
+## Clone and run
+
+```bash
+git clone https://github.com/trulayer/demo-typescript.git
+cd demo-typescript
+cp .env.example .env     # add TRULAYER_API_KEY and provider keys
+pnpm install
+pnpm basic-trace
+```
+
+To run every example against the bundled mock server (no network, no real keys):
+
+```bash
+pnpm run-all
+```
+
+## Representative examples
+
+<CardGroup cols={2}>
+  <Card title="basic-trace.ts" icon="code" href="https://github.com/trulayer/demo-typescript/blob/main/examples/basic-trace.ts">
+    Manual `trace()` and `span()` around a real OpenAI call — the smallest possible end-to-end example.
+  </Card>
+  <Card title="openai-auto.ts" icon="wand-magic-sparkles" href="https://github.com/trulayer/demo-typescript/blob/main/examples/openai-auto.ts">
+    `instrumentOpenAI()` — wraps the client so every `chat.completions.create` becomes a span automatically.
+  </Card>
+  <Card title="vercel-ai.ts" icon="bolt" href="https://github.com/trulayer/demo-typescript/blob/main/examples/vercel-ai.ts">
+    `instrumentVercelAI()` — auto-trace `generateText`, `streamText`, `generateObject`, and `streamObject`.
+  </Card>
+  <Card title="nextjs-route.ts" icon="server" href="https://github.com/trulayer/demo-typescript/blob/main/examples/nextjs-route.ts">
+    A Next.js App Router API route that traces a chat handler end-to-end with a SIGTERM-safe flush.
+  </Card>
+  <Card title="agent.ts" icon="robot" href="https://github.com/trulayer/demo-typescript/blob/main/examples/agent.ts">
+    Tool-calling agent loop, with one span per tool invocation and one per LLM turn.
+  </Card>
+</CardGroup>
+
+For the full list, see the [examples directory](https://github.com/trulayer/demo-typescript/tree/main/examples) on GitHub.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Tutorial" icon="graduation-cap" href="/sdks/typescript/tutorial">
+    Build the same patterns from scratch with a step-by-step walkthrough.
+  </Card>
+  <Card title="Reference" icon="book" href="/sdks/typescript/reference">
+    Every public export, with signatures and types.
+  </Card>
+</CardGroup>
