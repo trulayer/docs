@@ -253,6 +253,14 @@ paths:
         - name: to
           in: query
           schema: { type: string, format: date-time }
+        - name: latency_min
+          in: query
+          description: Minimum trace latency in milliseconds (inclusive). Must be a non-negative integer.
+          schema: { type: integer, minimum: 0 }
+        - name: latency_max
+          in: query
+          description: Maximum trace latency in milliseconds (inclusive). Must be a non-negative integer and greater than or equal to latency_min when both are supplied.
+          schema: { type: integer, minimum: 0 }
         - name: cursor
           in: query
           schema: { type: string }
@@ -288,6 +296,62 @@ paths:
                 $ref: "#/components/schemas/Trace"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/traces/export:
+    get:
+      operationId: exportTraces
+      tags: [traces, export]
+      summary: Stream traces as CSV or JSONL (sync export)
+      description: |
+        Cursor-streamed synchronous export of traces matching the same
+        filters as `GET /v1/traces`. Rows are written directly to the
+        response body — never buffered — and capped per plan
+        (Starter: 100, Pro/Team/Business: 5000, Enterprise: unlimited).
+        Hitting the cap sets `X-TruLayer-Truncated: true`; the payload is
+        complete up to that row.
+
+        CSV columns (in order): `id, project_id, model, environment,
+        status, duration_ms, token_count, cost_usd, created_at`.
+
+        JSONL emits one JSON object per line with the same keys.
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [csv, jsonl], default: csv }
+        - name: project_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: model
+          in: query
+          schema: { type: string }
+        - name: error
+          in: query
+          schema: { type: boolean }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Streamed CSV or JSONL payload.
+          headers:
+            X-TruLayer-Truncated:
+              description: Present and `true` when the per-plan row cap was hit and more rows exist.
+              schema: { type: boolean }
+            Content-Disposition:
+              description: Suggests a filename of `traces-YYYY-MM-DD.{csv,jsonl}`.
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+            application/x-ndjson:
+              schema: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -887,6 +951,51 @@ paths:
                 $ref: "#/components/schemas/Evaluation"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/eval/export:
+    get:
+      operationId: exportEvals
+      tags: [evals, export]
+      summary: Stream evaluations as CSV or JSONL (sync export)
+      description: |
+        Cursor-streamed synchronous export of evaluations. Rows are written
+        directly to the response body — never buffered — and capped per
+        plan (Starter: 100, Pro/Team/Business: 5000, Enterprise: unlimited).
+
+        CSV columns (in order): `id, trace_id, metric, score, label,
+        evaluator_type, model_tier, created_at`.
+
+        Reasoning is omitted by default. Pass `include_reasoning=true` to
+        include a `reasoning` column/field truncated to 500 characters.
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [csv, jsonl], default: csv }
+        - name: trace_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: include_reasoning
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Streamed CSV or JSONL payload.
+          headers:
+            X-TruLayer-Truncated:
+              description: Present and `true` when the per-plan row cap was hit and more rows exist.
+              schema: { type: boolean }
+            Content-Disposition:
+              description: Suggests a filename of `evals-YYYY-MM-DD.{csv,jsonl}`.
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+            application/x-ndjson:
+              schema: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
