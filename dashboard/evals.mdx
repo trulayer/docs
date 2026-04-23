@@ -16,7 +16,17 @@ The **Evals** page is where you configure evaluators, run them against traces or
 
 One row per eval result. Columns: trace ID, evaluator, metric, score, label, latency, timestamp. Click any row for the reasoning (LLM evals) or the rule output.
 
-Filters: evaluator type, metric name, label, time range, project.
+### Filters
+
+A filter bar above the results table narrows the list. All filter state lives in the URL, so any filtered view is shareable — bookmark it or paste the URL into a PR comment.
+
+- **Project** — scope results to a single project in the current organization.
+- **Metric** — restrict to one evaluator's metric (options come from the public eval catalog at `GET /v1/eval-catalog`).
+- **Score range** — `min` and `max` inputs accept a float between `0.0` and `1.0`. Values outside that range are ignored, and if `min > max` the conflicting value is dropped.
+- **Date range** — last 1h / 24h / 7d / 30d presets that map to `from` / `to` timestamps.
+- **Clear** — resets every active filter and removes each param from the URL.
+
+These map 1:1 to the query parameters on `GET /v1/eval`: `project_id`, `metric`, `score_min`, `score_max`, `from`, `to`.
 
 ## Datasets
 
