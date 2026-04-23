@@ -2696,9 +2696,9 @@ components:
     DsrRequestList:
       type: object
       required:
-        - items
+        - requests
       properties:
-        items:
+        requests:
           type: array
           items:
             $ref: "#/components/schemas/DsrRequest"
