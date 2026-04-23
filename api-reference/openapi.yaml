@@ -1677,6 +1677,63 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /v1/datasets/{id}/export:
+    get:
+      operationId: exportDatasetItems
+      tags: [datasets, export]
+      summary: Stream dataset items as CSV or JSONL (sync export)
+      description: |
+        Cursor-streamed synchronous export of items in the named dataset.
+        Rows are written directly to the response body — never buffered —
+        and capped per plan (Starter: 100, Pro/Team/Business: 5000,
+        Enterprise: unlimited). Hitting the cap sets
+        `X-TruLayer-Truncated: true`; the payload is complete up to that
+        row.
+
+        CSV columns (in order): `id, trace_id, span_id, label,
+        created_at`. A stored `label` of `NULL` surfaces as the literal
+        string `unlabeled` in CSV and as JSON `null` in JSONL so the
+        column is never blank.
+
+        The optional `label` query parameter filters by review label
+        (`pass`, `fail`, `unlabeled`) — `all` (the default when omitted)
+        applies no restriction.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: format
+          in: query
+          schema: { type: string, enum: [csv, jsonl], default: csv }
+        - name: label
+          in: query
+          schema:
+            type: string
+            enum: [pass, fail, unlabeled, all]
+            default: all
+      responses:
+        "200":
+          description: Streamed CSV or JSONL payload.
+          headers:
+            X-TruLayer-Truncated:
+              description: Present and `true` when the per-plan row cap was hit and more rows exist.
+              schema: { type: boolean }
+            Content-Disposition:
+              description: Suggests a filename of `dataset-{id}-YYYY-MM-DD.{csv,jsonl}`.
+              schema: { type: string }
+          content:
+            text/csv:
+              schema: { type: string }
+            application/x-ndjson:
+              schema: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /v1/datasets/{id}/items/{itemId}:
     patch:
       operationId: patchDatasetItem
