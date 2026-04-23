@@ -37,7 +37,8 @@
               "sdks/python/overview",
               "sdks/python/tutorial",
               "sdks/python/configuration",
-              "sdks/python/reference"
+              "sdks/python/reference",
+              "sdks/python/examples"
             ]
           },
           {
@@ -46,7 +47,8 @@
               "sdks/typescript/overview",
               "sdks/typescript/tutorial",
               "sdks/typescript/configuration",
-              "sdks/typescript/reference"
+              "sdks/typescript/reference",
+              "sdks/typescript/examples"
             ]
           },
           {
