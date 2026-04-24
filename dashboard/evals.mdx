@@ -59,6 +59,10 @@ Click **Run evaluators** on a dataset to trigger an evaluator over every trace i
 
 Runs can be compared pairwise — pick two runs over the same dataset and the dashboard diffs them by trace, highlighting regressions.
 
+### Export a run
+
+The run detail page has an **Export** button in the header that downloads the full run — metadata, per-item scores, and any LLM-judge reasoning — as a single JSON file named `eval-run-<id>.json`. Useful for archiving, sharing with reviewers, or diffing across runs outside the dashboard.
+
 ## Evaluators
 
 Built-in evaluators (always available):
