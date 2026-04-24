@@ -1,6 +1,6 @@
 ---
 title: "TypeScript SDK"
-description: "The @trulayer/sdk npm package — coming soon in depth, usable today."
+description: "The @trulayer/sdk npm package — zero runtime dependencies, works anywhere Node.js fetch does."
 ---
 
 The TypeScript SDK (`@trulayer/sdk` on npm) has zero runtime dependencies and works in Node.js 18+, Vercel Edge, Cloudflare Workers, and Bun. A browser build is available but we recommend relaying through your server for API-key safety.
@@ -38,16 +38,20 @@ await tl.trace("answer_question", async (trace) => {
 await tl.flush();
 ```
 
-## Full tutorial & reference — in progress
-
-The full TypeScript SDK walkthrough, configuration guide, and API reference are coming soon. Until then, the [Python tutorial](/sdks/python/tutorial) is the most complete guide — the TypeScript SDK mirrors the Python API shape closely.
+## Next steps
 
 <CardGroup cols={2}>
-  <Card title="README" icon="github" href="https://github.com/trulayer/client-typescript#readme">
-    Current usage docs in the SDK repo.
+  <Card title="Tutorial" icon="graduation-cap" href="/sdks/typescript/tutorial">
+    End-to-end walkthrough — instrument a RAG pipeline with traces, spans, and evals.
   </Card>
-  <Card title="Python tutorial" icon="graduation-cap" href="/sdks/python/tutorial">
-    Mirrored API — mentally substitute `snake_case` → `camelCase` and context managers → async callbacks.
+  <Card title="Reference" icon="book" href="/sdks/typescript/reference">
+    Full type signatures for every exported symbol.
+  </Card>
+  <Card title="Testing helpers" icon="flask" href="/sdks/typescript/testing">
+    In-memory sender and fluent assertions for unit tests.
+  </Card>
+  <Card title="Failure behavior" icon="shield" href="/sdks/typescript/fail-mode">
+    Default drop+warn semantics and the opt-in block mode.
   </Card>
 </CardGroup>
 

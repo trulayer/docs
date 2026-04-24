@@ -38,7 +38,9 @@
               "sdks/python/tutorial",
               "sdks/python/configuration",
               "sdks/python/reference",
-              "sdks/python/examples"
+              "sdks/python/examples",
+              "sdks/python/testing",
+              "sdks/python/fail-mode"
             ]
           },
           {
@@ -97,6 +99,16 @@
               "integrations/dspy",
               "integrations/haystack",
               "integrations/autogen"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/semantic-search",
+              "guides/model-routing",
+              "guides/otlp",
+              "guides/ci-eval-gate",
+              "guides/audit-verify"
             ]
           },
           {

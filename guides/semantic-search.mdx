@@ -1,0 +1,66 @@
+---
+title: "Semantic search over spans"
+description: "Find spans by meaning, not just exact match — powered by pgvector and your BYOK embedding key."
+---
+
+Every span TruLayer ingests is embedded server-side and indexed in pgvector. The `/v1/search/spans` endpoint lets you find spans by semantic similarity instead of substring match — useful for root-causing a regression ("find every span that looks like this failing one"), mining eval datasets ("grab 50 traces that resemble this user complaint"), or driving MCP agents that need to reason over trace history.
+
+## Two request shapes
+
+| Endpoint | When to use |
+| --- | --- |
+| `GET /v1/search/spans?q=<text>&project_id=<uuid>` | You have free-form text and want TruLayer to embed it for you (uses the tenant's configured BYOK embedding key — OpenAI preferred, Anthropic fallback). |
+| `POST /v1/search/spans` | You already have a 1536-dim query vector and want to skip the embedding hop. |
+
+Both accept `from`/`to` time bounds and an opaque `cursor` for pagination.
+
+## Example — free-text search
+
+```bash
+curl -G https://api.trulayer.ai/v1/search/spans \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  --data-urlencode "q=user asked about refunds but got a generic reply" \
+  --data-urlencode "project_id=$PROJECT_ID" \
+  --data-urlencode "from=2026-04-01T00:00:00Z" \
+  --data-urlencode "limit=20"
+```
+
+Response:
+
+```json
+{
+  "results": [
+    {
+      "span_id": "4f9a...",
+      "trace_id": "c1b7...",
+      "span_name": "generate",
+      "span_type": "llm",
+      "similarity": 0.87,
+      "created_at": "2026-04-12T14:22:11Z"
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+## Example — precomputed vector
+
+```bash
+curl -X POST https://api.trulayer.ai/v1/search/spans \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "'"$PROJECT_ID"'",
+    "query_vector": [0.01, -0.02, ...],
+    "limit": 20
+  }'
+```
+
+## Embedding provider
+
+The `GET` form embeds the query using the tenant's BYOK key. Configure one in Dashboard → Settings → Evaluators; without a BYOK key, the `GET` form returns `502` (`upstream embedding provider failed`). The `POST` form works regardless of BYOK config.
+
+## See also
+
+- [API reference — searchSpansText](/api-reference/introduction)
+- [Traces and spans](/concepts/traces-and-spans)

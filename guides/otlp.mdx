@@ -1,0 +1,53 @@
+---
+title: "OTLP ingest and export"
+description: "Dual-ship traces from an OTel Collector into TruLayer, and export back out in OTLP JSON for Datadog, Honeycomb, Tempo, or Jaeger."
+---
+
+TruLayer speaks native OpenTelemetry. You can push spans in via `POST /v1/otlp/traces` using the standard OTLP/HTTP wire format, and pull them back out as OTLP `TracesData` JSON via `GET /v1/otlp/export` to hand off to any downstream OTel-compatible backend.
+
+## Ingest — `POST /v1/otlp/traces`
+
+Accepts an `ExportTraceServiceRequest` payload in either protobuf (`application/x-protobuf`) or JSON. TruLayer maps OpenTelemetry GenAI semantic-convention attributes (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.input_tokens`, ...) onto the native span model and routes each span through the standard Kafka → processor → TimescaleDB pipeline.
+
+### OTel Collector exporter config
+
+```yaml
+exporters:
+  otlphttp/trulayer:
+    endpoint: https://api.trulayer.ai/v1/otlp
+    headers:
+      Authorization: "Bearer ${TRULAYER_API_KEY}"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlphttp/trulayer]
+```
+
+The exporter appends `/v1/traces` to the endpoint, which matches our ingest path exactly.
+
+### Size and status codes
+
+- Request bodies over **20 MiB** return `413`.
+- Unsupported `Content-Type` returns `415`.
+- Partial failures (some spans accepted, some rejected) return `200` with `partial_success` populated in the response body.
+
+## Export — `GET /v1/otlp/export`
+
+Streams traces as OTLP `TracesData` JSON so downstream tooling can ingest without a TruLayer-specific adapter. Dashboard-scoped (Clerk session auth) and capped at 10,000 spans per response; paginate via the `X-Next-Cursor` response header.
+
+```bash
+curl -G https://api.trulayer.ai/v1/otlp/export \
+  -H "Cookie: $CLERK_SESSION" \
+  --data-urlencode "from=2026-04-20T00:00:00Z" \
+  --data-urlencode "to=2026-04-21T00:00:00Z" \
+  --data-urlencode "project_id=$PROJECT_ID"
+```
+
+Point any OTel-JSON-capable ingester at the resulting payload — Datadog, Honeycomb, Grafana Tempo, Jaeger, and Zipkin all accept it.
+
+## See also
+
+- [API reference — otlpIngestTraces / otlpExportTraces](/api-reference/introduction)
+- [Traces and spans](/concepts/traces-and-spans)
