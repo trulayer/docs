@@ -165,5 +165,5 @@ Open [app.trulayer.ai](https://app.trulayer.ai) and go to **Traces**. Your trace
 ## Next steps
 
 - [Core Concepts](/concepts) — traces, spans, evaluations, and feedback loops explained
-- [Python SDK reference](/sdk/python) — full API reference for `trulayer`
-- [TypeScript SDK reference](/sdk/typescript) — full API reference for `@trulayer/sdk`
+- [Python SDK reference](/sdks/python/reference) — full API reference for `trulayer`
+- [TypeScript SDK reference](/sdks/typescript/reference) — full API reference for `@trulayer/sdk`
