@@ -1,0 +1,115 @@
+---
+title: "Scoped API keys"
+description: "Limit what a TruLayer API key can do — issue read-only query keys for MCP servers and AI agents."
+---
+
+API keys can carry an optional set of **scopes** that restrict what the key is allowed to do. The flagship use-case: hand an MCP server (or any LLM agent reasoning over your trace history) a `query`-scoped key so it can read traces, evals, and metrics but cannot ingest new spans, create feedback, or mutate any resource. If the key leaks, the blast radius is bounded to read access.
+
+## Why scopes exist
+
+A TruLayer key without scopes carries full access to every endpoint for its tenant — the same powers the dashboard UI has. That is the right default for your backend services and SDK initialization, but it is the wrong default for:
+
+- **MCP servers** connected to Claude, Cursor, Windsurf, or any other LLM client. The server should be able to answer "show me recent failures" without being able to forge traces or revoke other keys.
+- **Analytical clients and BI pipelines** that only read metrics and eval results.
+- **LLM agents** that reason over trace history as part of their prompt context — scoping prevents prompt-injection from escalating into data mutation.
+
+Scopes are additive: a key can carry one scope today, and future scopes (`ingest`, `feedback-write`, etc.) will be introduced the same way.
+
+## Available scopes
+
+| Scope | Grants |
+| --- | --- |
+| `query` | Read-only access to traces, evals, metrics, anomalies, projects, and the semantic-search endpoint. No writes, no key management, no billing. |
+
+A key may declare multiple scopes; the effective permission set is the union.
+
+## Back-compat: empty scopes = full access
+
+Keys created before the scopes feature — and keys you create without passing any `scopes` — have an empty `scopes` array and retain their legacy full access. Only keys that explicitly declare scopes are restricted by the scope middleware.
+
+This means you can safely roll out scoped keys alongside existing integrations without touching any currently deployed service.
+
+## Creating a scoped key in the dashboard
+
+1. Sign in to [app.trulayer.ai](https://app.trulayer.ai).
+2. Navigate to **Settings → API keys**.
+3. Click **Create key**.
+4. Give the key a descriptive name (e.g. `claude-mcp-readonly`).
+5. Under **Scopes**, select `query`.
+6. Click **Create**. Copy the displayed key — it will never be shown again.
+
+See [Dashboard — Settings → API keys](/dashboard/settings-api-keys) for the full key-management flow, including rotation and revocation.
+
+## Creating a scoped key via the API
+
+```bash
+curl -X POST https://api.trulayer.ai/v1/apikeys \
+  -H "Authorization: Bearer $DASHBOARD_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "claude-mcp-readonly",
+    "scopes": ["query"]
+  }'
+```
+
+Response:
+
+```json
+{
+  "id": "ak_01HXYZ...",
+  "name": "claude-mcp-readonly",
+  "prefix": "tl_live_4f2a",
+  "scopes": ["query"],
+  "secret": "tl_live_4f2a...full-key-shown-once...",
+  "created_at": "2026-04-24T10:00:00Z"
+}
+```
+
+The `secret` field is returned exactly once. Store it in your secret manager immediately.
+
+Omit `scopes` (or pass an empty array) to create a legacy full-access key.
+
+## Using a scoped key from the SDKs
+
+Scoped keys are ordinary bearer tokens — initialize the SDK the same way you always have.
+
+<CodeGroup>
+
+```python Python
+from trulayer import TruLayer
+
+client = TruLayer(api_key="tl_live_4f2a...")
+
+# Query scope: read-only endpoints work
+traces = client.traces.list(limit=50)
+runs = client.evals.list_runs()
+
+# Write endpoints raise a 403 ScopeError
+# client.traces.ingest(...)  # ❌ forbidden with a query-scoped key
+```
+
+```typescript TypeScript
+import { TruLayer } from '@trulayer/sdk'
+
+const client = new TruLayer({ apiKey: 'tl_live_4f2a...' })
+
+// Query scope: read-only endpoints work
+const { traces } = await client.traces.list({ limit: 50 })
+const runs = await client.evals.listRuns()
+
+// Write endpoints reject with a 403 ScopeError
+// await client.traces.ingest(...)  // ❌ forbidden with a query-scoped key
+```
+
+</CodeGroup>
+
+A write call with a scope-restricted key returns HTTP `403` with error code `scope_forbidden` — your client should treat it like any other authorization failure.
+
+## What to do if you need write access
+
+If an MCP tool or agent genuinely needs to write (for example, to submit feedback), create a second key with the appropriate scope rather than relaxing an existing one. Keep the read path and the write path on separate keys so you can revoke one without disrupting the other.
+
+## Related reading
+
+- [Dashboard — Settings → API keys](/dashboard/settings-api-keys) — full key lifecycle (create, rotate, revoke, audit)
+- [Semantic search over spans](/guides/semantic-search) — the canonical read-only endpoint MCP servers call

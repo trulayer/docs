@@ -108,7 +108,8 @@
               "guides/model-routing",
               "guides/otlp",
               "guides/ci-eval-gate",
-              "guides/audit-verify"
+              "guides/audit-verify",
+              "guides/api-key-scopes"
             ]
           },
           {
