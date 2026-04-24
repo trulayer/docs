@@ -48,7 +48,9 @@
               "sdks/typescript/tutorial",
               "sdks/typescript/configuration",
               "sdks/typescript/reference",
-              "sdks/typescript/examples"
+              "sdks/typescript/examples",
+              "sdks/typescript/testing",
+              "sdks/typescript/fail-mode"
             ]
           },
           {

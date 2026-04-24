@@ -1,0 +1,137 @@
+---
+title: "Testing with the TypeScript SDK"
+description: "Framework-agnostic helpers for asserting on captured traces without hitting the network."
+---
+
+The TypeScript SDK ships a dedicated `@trulayer/sdk/testing` subpath with an in-memory sender and a fluent assertion chain. No API key is required, no network calls are made, and the helpers work under Vitest, Jest, Mocha, or any runner that treats thrown errors as failures.
+
+## Install
+
+```bash
+pnpm add -D @trulayer/sdk
+```
+
+The testing helpers are bundled with the main package; import them from the dedicated subpath so your production bundle stays small:
+
+```typescript
+import { createTestClient, assertSender } from "@trulayer/sdk/testing";
+```
+
+## Write your first test
+
+```typescript
+import { describe, it } from "vitest";
+import { createTestClient, assertSender } from "@trulayer/sdk/testing";
+
+describe("rag pipeline", () => {
+  it("emits retrieve + generate spans", async () => {
+    const { client, sender } = createTestClient();
+
+    await client.trace("rag-pipeline", async (trace) => {
+      await trace.span("retrieve", "retrieval", async (span) => {
+        span.setMetadata({ docCount: 5 });
+      });
+      await trace.span("generate", "llm", async (span) => {
+        span.setModel("gpt-4o");
+        span.setMetadata({ "gen_ai.system": "openai" });
+      });
+    });
+    client.flush();
+
+    assertSender(sender)
+      .hasTrace()
+      .spanCount(2)
+      .hasSpanNamed("retrieve")
+      .hasSpanNamed("generate")
+      .hasAttribute("model", "gpt-4o")
+      .hasAttribute("gen_ai.system", "openai");
+  });
+});
+```
+
+## API
+
+### `createTestClient(overrides?)`
+
+Returns `{ client, sender }`. The `client` is a fully functional `TruLayer` wired to an in-memory `LocalBatchSender`. Pass partial config overrides (sampling rate, redaction callback, project name) to exercise specific client behavior:
+
+```typescript
+const { client, sender } = createTestClient({
+  sampleRate: 0.5,
+  redact: (value) => (typeof value === "string" ? value.replace(/sk-\w+/g, "[redacted]") : value),
+});
+```
+
+### `assertSender(sender)`
+
+Entry point for the fluent assertion chain. Each method returns `this` (or, for `hasTrace`, a `TraceAssertions` scoped to a specific trace) so assertions chain naturally.
+
+| Method | Scope | Behaviour |
+| --- | --- | --- |
+| `.hasTrace(traceId?)` | sender | Asserts the sender captured at least one trace, or the trace with the given ID. Returns a `TraceAssertions`. |
+| `.spanCount(n)` | sender | Asserts the total span count across all captured traces. |
+| `.hasSpanNamed(name)` | sender | Asserts at least one span with the given name is present across all traces. |
+| `.spanCount(n)` | trace | Asserts the per-trace span count. |
+| `.hasSpanNamed(name)` | trace | Asserts the trace contains a span with the given name; the error message lists observed span names. |
+| `.hasAttribute(key, value)` | trace | Asserts at least one span carries the given attribute. |
+
+### `hasAttribute` lookup order
+
+`hasAttribute(key, value)` first looks up the key on each span's `metadata` object (where `span.setMetadata({...})` writes and where auto-instrumenters following the OpenTelemetry GenAI conventions place their attributes). If not found, it falls back to a short list of well-known top-level fields:
+
+- `model`
+- `name`
+- `span_type`
+- `prompt_tokens`
+- `completion_tokens`
+
+This lets tests assert on `model: "gpt-4o"` without knowing whether the instrumenter wrote the value to `span.data.model` or to `metadata["model"]`.
+
+Comparison is deep-equal, so objects and arrays work too:
+
+```typescript
+assertSender(sender)
+  .hasTrace()
+  .hasAttribute("tool.args", { query: "trulayer pricing", top_k: 5 });
+```
+
+## Replay captured traces
+
+`LocalBatchSender.flushToFile(path)` serializes every captured trace to a JSONL file — one JSON object per line. `replay({ file })` reads the file and re-emits each trace through a new (or caller-provided) `LocalBatchSender`, which makes golden-file regression tests and reproducing production traces locally straightforward.
+
+```typescript
+import { createTestClient, replay } from "@trulayer/sdk/testing";
+
+// Capture once, write a fixture:
+const { client, sender } = createTestClient();
+await client.trace("...", async (t) => {
+  /* ... */
+});
+client.flush();
+await sender.flushToFile("fixtures/golden.jsonl");
+
+// In another test, reload and assert:
+const { sender: replayed, replayed: count, skipped } = await replay({
+  file: "fixtures/golden.jsonl",
+});
+assertSender(replayed).spanCount(count > 0 ? count : 0);
+```
+
+Malformed JSONL lines are skipped and logged to `console.warn` — the helper follows the SDK's never-throws contract so a single corrupt line in a fixture never takes down an entire test run.
+
+## Running captures via environment variables
+
+For integration tests that spin up a full server, set the replay mode variables on the process before loading your app. `init()` wires them up automatically:
+
+```bash
+TRULAYER_MODE=replay \
+TRULAYER_REPLAY_FILE=fixtures/golden.jsonl \
+  pnpm vitest run
+```
+
+Setting `TRULAYER_MODE=replay` also forces local mode — replayed traces never escape to the live API, because they were produced by a previous capture and would double-count.
+
+## See also
+
+- [Failure behavior](./fail-mode) — how the SDK handles ingest outages and how to opt in to block mode.
+- [TypeScript SDK reference](./reference) — full type signatures.
