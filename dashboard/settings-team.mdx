@@ -11,11 +11,9 @@ description: "Invite members, manage roles, and configure SSO."
 
 | Role | Can do | Cannot do |
 | ---- | ------ | --------- |
-| `owner` | Everything — billing, team changes, policy enforcement, kill-switch. | (no restriction) |
-| `operator` | Manage control policies, approve/reject HITL items, manage alert rules. | Change billing or team. |
-| `member` | Create and edit traces, evals, datasets, and API keys. Read everything. | Manage policies, billing, team. |
-| `auditor` | Read every resource including audit logs and evidence spans. Export data. | Write or delete anything. |
-| `viewer` | Read traces, evals, metrics, feedback. | Write anything. Does not count toward the paid seat cap on Starter/Pro plans. |
+| `owner` | Everything — billing, team changes, control policies, kill-switch, DLQ resolve, HITL approvals, alert rules. | (no restriction) |
+| `member` | Day-to-day read/write on traces, evals, projects, datasets, and API keys. Read non-compliance resources. | Manage control policies, billing, team. Access audit log or DLQ. |
+| `viewer` | Read-only access to traces, evals, metrics, and feedback. Compliance reads: audit log and DLQ list. Export data. | Write or delete anything. Resolve DLQ items or change policies. Does not count toward the paid seat cap on Starter/Pro plans. |
 
 Roles are checked server-side on every API request — you cannot escalate by tampering with the client.
 
@@ -64,4 +62,4 @@ Once SSO is active:
 
 ## Audit log
 
-Every invite, role change, suspension, and SSO configuration event is recorded in the audit log available to `auditor` and `owner` roles. Export via the dashboard or `GET /v1/audit`.
+Every invite, role change, suspension, and SSO configuration event is recorded in the audit log available to `owner` and `viewer` roles (read-only for `viewer`). `member` does not have audit log access. Export via the dashboard or `GET /v1/audit`.
