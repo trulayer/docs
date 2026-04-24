@@ -15,6 +15,10 @@ A `tl_`-prefixed bearer token that authenticates SDK and server-side API request
 
 A group of traces shipped to the ingest API in one request. The SDK batches automatically — default `batchSize` is 50 traces or 2 seconds, whichever comes first.
 
+## BYOK
+
+"Bring Your Own Key." Using your own model-provider credentials (OpenAI, Anthropic, etc.) for [evaluator](#evaluator) LLM calls, so evaluation runs on your billing and your rate limits. Configure per-project in Dashboard → Settings → Evaluators. If no BYOK credential is set, TruLayer falls back to its managed judge model (counted against your eval quota).
+
 ## Control loop
 
 TruLayer's planned feature (V2, 2027 Q1) for real-time automated responses to failures — kill switches, auto-retries, fallback model routing. Not yet GA.
@@ -23,9 +27,21 @@ TruLayer's planned feature (V2, 2027 Q1) for real-time automated responses to fa
 
 A named collection of traces used for regression testing. Running an [eval](#eval) over a dataset produces a score-per-trace that you can compare across app versions.
 
+## DLQ
+
+Dead-letter queue. Traces that fail ingestion validation or downstream processing after retries are parked here instead of being silently dropped. View recent DLQ activity in Dashboard → Ingestion health. Common causes: malformed metadata, schema drift, over-size payloads.
+
 ## Eval
 
 An automated judgement of a trace, producing a `score`, `label`, and optional `reasoning`. Types: `llm` (an LLM judges against a rubric) and `rule` (deterministic code). See [Evaluations](/concepts/evals).
+
+## Eval run
+
+One invocation of an [evaluator](#evaluator) against one [trace](#trace) (or one trace in a [dataset](#dataset)). Has a status (`pending`, `running`, `succeeded`, `failed`) and, on success, a `score` and optional `reasoning`. Visible in the trace detail view and aggregated into [metrics](#metric).
+
+## Evaluator
+
+The definition of a judgement — prompt, rubric, model, and trigger. An evaluator applied to a trace produces an [eval run](#eval-run). Built-in evaluators (hallucination, toxicity, answer-relevance) ship with TruLayer; custom evaluators are defined in the dashboard. Manage in Dashboard → Evals.
 
 ## Event
 
@@ -54,6 +70,10 @@ Code that creates traces and spans. Manual instrumentation: calling `trace()` / 
 ## Metric
 
 An aggregated number over traces — error rate, p95 latency, total cost, feedback positive rate. Computed continuously; query via `/v1/metrics` or the dashboard. See [Metrics](/concepts/metrics).
+
+## PII redaction
+
+The process of stripping personally identifiable information from trace inputs, outputs, and metadata before the SDK ships data off your host. Implemented via the [scrub function](#scrub-function). Required for compliance with most privacy regulations — never rely on server-side "we'll mask it later" masking. See the [redaction guide](/sdks/redaction).
 
 ## OpenAPI
 
