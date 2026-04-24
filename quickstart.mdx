@@ -13,9 +13,28 @@ This guide gets you from zero to a traced LLM call visible in the dashboard in u
   - **Node.js 18+** (or Bun, or an Edge runtime) for the TypeScript SDK
 - An LLM provider API key — this quickstart uses OpenAI
 
-## 1. Create an API key
+## 1. Create a project
 
-After signing up, go to **Settings → API keys** in the dashboard and click **Create key**. Copy the key — it starts with `tl_` and is shown **only once**.
+Projects are how TruLayer partitions traces — one per app or environment (for example `quickstart`, `checkout-api-prod`, `checkout-api-staging`). Every trace you send must belong to a project, and every API key is scoped to the tenant, so creating a project first keeps your traces from piling into a single unsorted bucket.
+
+In the dashboard, go to **Projects → New project**, give it a name (the quickstart uses `quickstart`), and save. The project name is what you pass to the SDK in step 3 — keep it handy.
+
+<Tip>
+  You can also create a project with one API call after step 2 finishes:
+
+  ```bash
+  curl -X POST https://api.trulayer.ai/v1/projects \
+    -H "Authorization: Bearer $TRULAYER_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "quickstart"}'
+  ```
+
+  The response includes a `project_id` you can use in place of the name if you prefer referring to projects by ID.
+</Tip>
+
+## 2. Create an API key
+
+Go to **Settings → API keys** in the dashboard and click **Create key**. Copy the key — it starts with `tl_` and is shown **only once**.
 
 <Warning>
   API keys are sensitive. Store them in environment variables, not in source code. Keys are tenant-scoped — they grant ingest and read access to every project in your organisation.
@@ -26,7 +45,7 @@ export TRULAYER_API_KEY=tl_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export OPENAI_API_KEY=sk-...
 ```
 
-## 2. Install the SDK
+## 3. Install the SDK
 
 <CodeGroup>
 ```bash Python
@@ -38,7 +57,7 @@ npm install @trulayer/sdk openai
 ```
 </CodeGroup>
 
-## 3. Send your first trace
+## 4. Send your first trace
 
 The example below makes one OpenAI call and ships the trace (prompt, response, latency, token counts, model) to TruLayer. It uses auto-instrumentation so you don't have to wrap calls manually.
 
@@ -90,7 +109,7 @@ await tl.flush();
   In short-lived scripts, always call `flush()` (TS) or let the process exit naturally after `trulayer.init()` — the SDK batches traces and needs a moment to ship them before exit.
 </Tip>
 
-## 4. View the trace
+## 5. View the trace
 
 Open [the dashboard](https://app.trulayer.ai) and navigate to **Traces**. Your trace should appear within a few seconds, showing:
 
@@ -102,7 +121,7 @@ Open [the dashboard](https://app.trulayer.ai) and navigate to **Traces**. Your t
 
 Click the trace to see the span waterfall — one span per LLM call, with full request and response captured.
 
-## 5. Next steps
+## 6. Next steps
 
 <CardGroup cols={2}>
   <Card title="Add more auto-instrumentation" icon="plug" href="/sdks/python/tutorial#auto-instrumentation">
