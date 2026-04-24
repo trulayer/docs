@@ -1,0 +1,62 @@
+---
+title: "Model routing"
+description: "Tenant-scoped rules that map logical model names to concrete provider models, with fallback."
+---
+
+Model routes let you decouple your application code from specific provider SKUs. Declare a logical name (e.g. `fast-summariser`) once in TruLayer, point it at a primary and fallback model, and swap providers without redeploying.
+
+## CRUD endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/v1/model-routes` | List routes for the tenant (paginated via `cursor`). |
+| `POST` | `/v1/model-routes` | Create a route. |
+| `PATCH` | `/v1/model-routes/{id}` | Partial update. |
+| `DELETE` | `/v1/model-routes/{id}` | Remove a route. |
+
+All endpoints require a bearer API key (`tl_...`).
+
+## Create a route
+
+```bash
+curl -X POST https://api.trulayer.ai/v1/model-routes \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "fast-summariser",
+    "primary_model": "gpt-4o-mini",
+    "fallback_model": "claude-3-5-haiku",
+    "enabled": true
+  }'
+```
+
+Response (`201 Created`):
+
+```json
+{
+  "id": "1f3b...",
+  "name": "fast-summariser",
+  "primary_model": "gpt-4o-mini",
+  "fallback_model": "claude-3-5-haiku",
+  "enabled": true,
+  "created_at": "2026-04-24T10:22:11Z"
+}
+```
+
+## Update a route
+
+```bash
+curl -X PATCH https://api.trulayer.ai/v1/model-routes/1f3b... \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"fallback_model": "claude-3-5-sonnet"}'
+```
+
+## Disable temporarily
+
+Set `enabled: false` via `PATCH` to short-circuit a route without deleting its history. Handy during incidents when you want to force all callers onto the fallback.
+
+## See also
+
+- [Control loop](/dashboard/control) — dashboard view of active routes and recent failovers.
+- [API reference — model-routes](/api-reference/introduction)

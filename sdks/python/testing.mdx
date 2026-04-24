@@ -1,0 +1,105 @@
+---
+title: "Testing with the Python SDK"
+description: "Framework-agnostic helpers for asserting on captured traces without hitting the network."
+---
+
+The Python SDK ships a dedicated `trulayer.testing` module with an in-memory sender and a fluent assertion chain. No API key is required, no network calls are made, and the helpers work under `pytest`, `unittest`, or any runner that treats `AssertionError` as a failure.
+
+## Install
+
+```bash
+pip install trulayer
+```
+
+The testing helpers are bundled with the main package; import them from the submodule so production code stays free of test-only symbols:
+
+```python
+from trulayer.testing import create_test_client, assert_sender
+```
+
+## Write your first test
+
+```python
+from trulayer.testing import create_test_client, assert_sender
+
+
+def test_rag_pipeline_emits_retrieve_and_generate_spans():
+    client, sender = create_test_client()
+
+    with client.trace("rag-pipeline") as trace:
+        with trace.span("retrieve", "retrieval") as span:
+            span.set_metadata({"doc_count": 5})
+        with trace.span("generate", "llm") as span:
+            span.set_model("gpt-4o")
+            span.set_metadata({"gen_ai.system": "openai"})
+    client.flush()
+
+    assert_sender(sender) \
+        .has_trace() \
+        .span_count(2) \
+        .has_span_named("retrieve") \
+        .has_span_named("generate")
+```
+
+## API
+
+### `create_test_client(**overrides)`
+
+Returns a `(client, sender)` tuple. The `client` is a fully functional `TruLayerClient` wired to an in-memory `LocalBatchSender`. Pass keyword overrides (`sample_rate`, `redact`, `project`) to exercise specific client behavior:
+
+```python
+client, sender = create_test_client(
+    sample_rate=0.5,
+    redact=lambda v: "[redacted]" if isinstance(v, str) and "sk-" in v else v,
+)
+```
+
+### `assert_sender(sender)`
+
+Entry point for the fluent assertion chain. Each method returns `self` so assertions chain naturally.
+
+| Method | Behaviour |
+| --- | --- |
+| `.has_trace(trace_id=None)` | Asserts the sender captured at least one trace, or the trace with the given ID. |
+| `.span_count(n)` | Asserts the total span count across all captured traces. |
+| `.has_span_named(name)` | Asserts at least one span with the given name is present; error message lists observed span names. |
+
+## Replay captured traces
+
+`LocalBatchSender.flush_to_file(path)` serializes every captured trace to a JSONL file — one JSON object per line. Combined with `TRULAYER_MODE=replay`, this enables golden-file regression tests and reproducing production traces locally.
+
+```python
+from trulayer.testing import create_test_client
+
+# Capture once, write a fixture:
+client, sender = create_test_client()
+with client.trace("rag-pipeline") as trace:
+    ...
+client.flush()
+sender.flush_to_file("fixtures/golden.jsonl")
+```
+
+Malformed JSONL lines are skipped with a `warnings.warn` — the helper follows the SDK's never-throws contract so a single corrupt line in a fixture never takes down an entire test run.
+
+## Running captures via environment variables
+
+For integration tests that spin up a full app, set the mode variables on the process before loading your code. `trulayer.init()` wires them up automatically:
+
+```bash
+TRULAYER_MODE=local pytest
+```
+
+Replay a previously captured fixture through the SDK as if it were live traffic:
+
+```bash
+TRULAYER_MODE=replay \
+TRULAYER_REPLAY_FILE=fixtures/golden.jsonl \
+  pytest
+```
+
+`TRULAYER_MODE=replay` implies `local` — replayed traces never escape to the live API, because they were produced by a previous capture and would double-count.
+
+## See also
+
+- [Failure behavior](/sdks/python/fail-mode) — how the SDK handles ingest outages and how to opt in to block mode.
+- [Python SDK reference](/sdks/python/reference) — full signatures for `create_test_client`, `assert_sender`, and `LocalBatchSender`.

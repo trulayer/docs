@@ -1,0 +1,76 @@
+---
+title: "CI eval gate"
+description: "Fail a pull request when the eval score drops below your policy — or warn without blocking."
+---
+
+The CI eval gate turns an eval run into a pass/warn/block decision suitable for a CI check. Run your eval (`POST /v1/eval`), then call `POST /v1/ci/gate` with the run ID and a policy, and gate the build on the returned `decision`.
+
+## Endpoint — `POST /v1/ci/gate`
+
+### Request
+
+```json
+{
+  "dataset_id": "1f3b...",
+  "run_id": "9c4e...",
+  "baseline_run_id": "7a21...",
+  "policy": {
+    "score_floor": 0.8,
+    "delta_tolerance": -0.02,
+    "on_fail": "block"
+  }
+}
+```
+
+- `score_floor` — absolute floor. If `mean_score < score_floor`, the gate fires.
+- `delta_tolerance` — negative number. If `mean_score - baseline_mean_score < delta_tolerance`, the gate fires. Requires `baseline_run_id`.
+- `on_fail` — `warn` or `block`. Controls the `decision` value emitted on failure (`pass` is always returned when the run is within policy).
+
+### Response
+
+```json
+{
+  "decision": "block",
+  "mean_score": 0.74,
+  "mean_delta": -0.06,
+  "run_url": "https://app.trulayer.ai/datasets/1f3b/runs/9c4e",
+  "reason": "mean_score 0.74 below floor 0.80"
+}
+```
+
+The `reason` string is safe to surface directly in CI output.
+
+## GitHub Actions example
+
+```yaml
+- name: Run eval
+  id: eval
+  run: |
+    RUN_ID=$(curl -s -X POST https://api.trulayer.ai/v1/eval \
+      -H "Authorization: Bearer $TRULAYER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"dataset_id":"'"$DATASET_ID"'","evaluator_id":"'"$EVALUATOR_ID"'"}' \
+      | jq -r .run_id)
+    echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+- name: Gate on eval
+  run: |
+    curl -sf -X POST https://api.trulayer.ai/v1/ci/gate \
+      -H "Authorization: Bearer $TRULAYER_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "dataset_id":"'"$DATASET_ID"'",
+        "run_id":"${{ steps.eval.outputs.run_id }}",
+        "policy":{"score_floor":0.8,"on_fail":"block"}
+      }' | tee gate.json
+    [ "$(jq -r .decision gate.json)" != "block" ]
+```
+
+## Dashboard
+
+A lightweight UI for manual gate checks lives at **Dashboard → Settings → CI Gate**. It hits the same endpoint — useful for trying out a policy before wiring it into CI.
+
+## See also
+
+- [Evals](/concepts/evals)
+- [API reference — ciGate](/api-reference/introduction)
