@@ -35,6 +35,34 @@ If you use a model not in TruLayer's price table (self-hosted, custom provider),
 
 **Scrub metadata too.** The SDK applies `scrub_fn` to inputs and outputs. If you put email addresses in metadata, wrap them yourself.
 
+<CodeGroup>
+```python Python
+import re, trulayer
+
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+
+def scrub(value):
+    if isinstance(value, str):
+        return EMAIL.sub("[email]", value)
+    return value
+
+trulayer.init(api_key=..., project="prod", scrub_fn=scrub)
+```
+
+```typescript TypeScript
+import { init } from "@trulayer/sdk";
+
+const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
+
+init({
+  apiKey: process.env.TRULAYER_API_KEY,
+  project: "prod",
+  scrubFn: (value) =>
+    typeof value === "string" ? value.replace(EMAIL, "[email]") : value,
+});
+```
+</CodeGroup>
+
 ## Error handling
 
 **Let exceptions propagate.** The SDK captures them automatically onto the active trace/span. Don't try/except just to swallow — the dashboard's failure clustering relies on real exception types.
@@ -51,7 +79,8 @@ If you use a model not in TruLayer's price table (self-hosted, custom provider),
 
 **Never sample errors.** A simple pattern:
 
-```python
+<CodeGroup>
+```python Python
 import random, trulayer
 
 def sample(ctx):
@@ -62,11 +91,57 @@ def sample(ctx):
 trulayer.init(..., sample_rate=sample)
 ```
 
-## Local & test mode
+```typescript TypeScript
+import { init } from "@trulayer/sdk";
 
-**Use `debug=true` in tests.** It logs payloads to stdout instead of shipping them. Pair with a Jest/pytest snapshot to assert on trace shape without a network.
+init({
+  sampleRate: (ctx) => {
+    if (ctx.hasError) return true;
+    return Math.random() < 0.1;
+  },
+});
+```
+</CodeGroup>
 
-**Or point at a mock server.** Your CI can run `openapi-mock` against `api-reference/openapi.yaml` and set `endpoint` to `http://localhost:...`. TruLayer's demo repos use this pattern.
+## Local & sandbox mode
+
+**Use `TRULAYER_MODE=local` in CI.** Set this environment variable and the SDK short-circuits: no network calls, no API key required, no tenant pollution. Traces are collected in-process so you can still assert on their shape, but nothing ships. This is the safest default for unit tests, pre-merge CI, and example code.
+
+<CodeGroup>
+```python Python
+# In your test setup
+import os
+os.environ["TRULAYER_MODE"] = "local"
+
+import trulayer
+trulayer.init(project="tests")  # no api_key needed in local mode
+
+with trulayer.trace("unit-test") as t:
+    t.set_output({"ok": True})
+
+# Assert on the captured trace without a network round-trip
+assert trulayer.testing.last_trace().name == "unit-test"
+```
+
+```typescript TypeScript
+// In your test setup
+process.env.TRULAYER_MODE = "local";
+
+import { init, trace, testing } from "@trulayer/sdk";
+init({ project: "tests" }); // no apiKey needed in local mode
+
+await trace("unit-test", async (t) => {
+  t.setOutput({ ok: true });
+});
+
+// Assert on the captured trace without a network round-trip
+expect(testing.lastTrace().name).toBe("unit-test");
+```
+</CodeGroup>
+
+**Use `debug: true` when you want the wire payload.** Debug mode still ships, but also logs the serialised trace to stdout — useful for diagnosing a production payload issue locally.
+
+**Point at a mock server for end-to-end tests.** If you need to exercise the HTTP path, run `openapi-mock` against `api-reference/openapi.yaml` and set `endpoint` to `http://localhost:...`. TruLayer's demo repos use this pattern in their integration test suites.
 
 ## Sessions
 

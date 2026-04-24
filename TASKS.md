@@ -40,16 +40,16 @@ This repo doesn't ship runtime code, so the backend/frontend "tests required" ru
 
 ### Content — pending (tracked in Linear)
 
-- [ ] TypeScript SDK — tutorial, configuration, reference → [TRU-92](https://linear.app/omnimoda/issue/TRU-92)
-- [ ] Dashboard guide — one page per `(dashboard)` route → [TRU-94](https://linear.app/omnimoda/issue/TRU-94) *(High)*
-- [ ] Framework integrations — OpenAI, Anthropic, LangChain, Vercel AI, PydanticAI → [TRU-95](https://linear.app/omnimoda/issue/TRU-95) *(High)*
-- [ ] Best practices — tracing patterns, PII, cost/latency, sampling, error handling → [TRU-96](https://linear.app/omnimoda/issue/TRU-96) *(Low — deferred)*
-- [ ] Glossary → [TRU-96](https://linear.app/omnimoda/issue/TRU-96) *(Low — deferred)*
+- [x] TypeScript SDK — tutorial, configuration, reference → [TRU-92](https://linear.app/omnimoda/issue/TRU-92)
+- [x] Dashboard guide — one page per `(dashboard)` route → [TRU-94](https://linear.app/omnimoda/issue/TRU-94)
+- [x] Framework integrations — OpenAI, Anthropic, LangChain, Vercel AI, PydanticAI → [TRU-95](https://linear.app/omnimoda/issue/TRU-95)
+- [x] Best practices — tracing patterns, PII, cost/latency, sampling, error handling → [TRU-96](https://linear.app/omnimoda/issue/TRU-96)
+- [x] Glossary → [TRU-96](https://linear.app/omnimoda/issue/TRU-96)
 
 ### Infrastructure — pending
 
 - [x] `package.json` with `sync-openapi` script → part of [TRU-88](https://linear.app/omnimoda/issue/TRU-88)
-- [ ] Mintlify GitHub app installed + custom domain `docs.trulayer.ai` → [TRU-98](https://linear.app/omnimoda/issue/TRU-98)
+- [x] Mintlify GitHub app installed + custom domain `docs.trulayer.ai` → [TRU-98](https://linear.app/omnimoda/issue/TRU-98)
 - [ ] Logo + favicon assets replaced with real brand files (currently starter placeholders)
 
 ---
@@ -59,7 +59,7 @@ This repo doesn't ship runtime code, so the backend/frontend "tests required" ru
 Pick up during a quiet window; not on the critical path for early customers.
 
 - [x] CI on backend repo to open a PR here when `api/openapi.yaml` changes → [TRU-93](https://linear.app/omnimoda/issue/TRU-93)
-- [ ] Docs-update rule added to `frontend/CLAUDE.md`, `backend/CLAUDE.md`, and both SDK repos → [TRU-97](https://linear.app/omnimoda/issue/TRU-97) *(Normal)*
+- [x] Docs-update rule added to `frontend/CLAUDE.md`, `backend/CLAUDE.md`, and both SDK repos → [TRU-97](https://linear.app/omnimoda/issue/TRU-97)
 - [ ] Docs-update rule added to `frontend/docs/conventions.md` and `backend/docs/conventions.md`
 - [ ] PR template updated in all four repos to include a docs checklist item
 
