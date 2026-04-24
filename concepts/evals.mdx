@@ -73,6 +73,28 @@ curl https://api.trulayer.ai/v1/eval \
 | `reasoning` | string | For LLM evals: the evaluator's explanation |
 | `evaluator_version` | string | The evaluator that produced this result |
 
+## Data flow for evals
+
+LLM evals run the trace content through a **judge model**. Which model is called — and whose API key pays for the call — depends on your plan.
+
+| Tier | Evals available | Judge model | Whose API key |
+| ---- | --------------- | ----------- | ------------- |
+| Starter | No | N/A | N/A |
+| Pro | Yes | `claude-3-5-haiku` (Anthropic) or `gpt-4o-mini` (OpenAI), chosen by the evaluator | **TruLayer's** platform key |
+| Team, Business, Enterprise | Yes | The judge model you configure with your BYOK credentials | **Your** API key (BYOK) |
+
+### What this means at Pro tier
+
+When a Pro-tier org triggers an LLM eval, TruLayer sends the trace input and output to the judge model using its own Anthropic or OpenAI API key. The trace content leaves TruLayer's infrastructure on the Pro platform key's account for the duration of the judge call and is subject to the judge provider's data-processing terms.
+
+The dashboard surfaces this as a callout on the Evals page so the behaviour is visible before a run lands in production.
+
+### What this means at Team and above
+
+Team, Business, and Enterprise plans support **bring-your-own-key (BYOK)**. Configure your Anthropic or OpenAI credentials in Settings → Integrations and TruLayer will route every LLM eval — including the judge call — through your key. Trace content never leaves your provider account.
+
+Rule-based evals (JSON-schema, regex, latency bounds, etc.) run entirely inside TruLayer's infrastructure at every tier — no third-party judge model, no external API call.
+
 ## Regression testing
 
 Evals over a **dataset** (a fixed set of traces) let you detect regressions between app versions. See the [Dashboard guide](https://app.trulayer.ai/evals) for running datasets.
