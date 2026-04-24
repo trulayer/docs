@@ -14,17 +14,15 @@ billing-plane events, trace reads, and control-plane actions.
 
 The audit log is restricted to two roles:
 
-| Role    | Can view audit log |
-| ------- | :----------------: |
-| owner   |         yes        |
-| auditor |         yes        |
-| operator|          —         |
-| member  |          —         |
-| viewer  |          —         |
+| Role   | Can view audit log |
+| ------ | :----------------: |
+| owner  |         yes        |
+| viewer |         yes        |
+| member |          —         |
 
 If you land on the page without sufficient permissions, you will see a
 "You don't have permission to view the audit log" notice instead of the
-table. Ask an owner in your workspace to assign you the **auditor**
+table. Ask an owner in your workspace to assign you the **viewer**
 role — intended for compliance teams and external auditors that need
 read access without mutation privileges.
 
