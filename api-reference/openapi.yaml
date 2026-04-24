@@ -3115,6 +3115,43 @@ components:
         trace_id: { type: string, format: uuid }
         evaluator_type: { type: string, enum: [llm, rule] }
         metric_name: { type: string }
+        config:
+          type: object
+          description: >
+            Evaluator-specific configuration. Free-form for forward
+            compatibility; recognised keys are documented below. Unknown
+            keys are ignored.
+          additionalProperties: true
+          properties:
+            provider:
+              type: string
+              enum: [anthropic, openai]
+              default: anthropic
+              description: >
+                LLM provider for the `llm` evaluator type. Defaults to
+                `anthropic`. Ignored for non-LLM evaluators.
+            model:
+              type: string
+              description: >
+                Explicit model override (e.g. `gpt-4o-mini`,
+                `claude-haiku-4-5-20251001`). When set, takes precedence
+                over `model_tier`.
+            model_tier:
+              type: string
+              enum: [cheap, premium]
+              description: >
+                Judge model tier. `premium` requires a BYOK key for the
+                selected provider under `/v1/settings/eval-keys`.
+            preset:
+              type: string
+              description: >
+                Catalog-backed preset name (e.g. `toxicity`). See
+                `GET /v1/eval-catalog` for the full list.
+            prompt:
+              type: string
+              description: >
+                Custom rubric passed to the judge system prompt. Ignored
+                when `preset` resolves to a catalog entry.
 
     EvalTriggerResponse:
       type: object
