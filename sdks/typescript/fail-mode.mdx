@@ -1,0 +1,106 @@
+---
+title: "Failure behavior"
+description: "What happens when the TruLayer ingest API is unreachable, and how to opt in to blocking semantics."
+---
+
+The TypeScript SDK is designed so that a TruLayer ingest outage never becomes an application outage. This page documents the default behavior and the one opt-in knob for teams who deliberately want the opposite tradeoff.
+
+## Default — drop and warn
+
+When the ingest API is unreachable (network error) or returns a transient status (`5xx`), the SDK:
+
+1. Retries the batch up to **3×** with exponential backoff (500 ms, 1 s, 2 s).
+2. On the third failure, drops the batch in-memory and emits a single `console.warn`.
+3. Suppresses warnings for subsequent failures within a **60-second window** to avoid log flooding — a fresh warning is emitted once the window rolls over.
+
+User code never blocks on network I/O and never sees a batch failure surface as an exception. Trace capture runs in-process on the critical path; transport runs on a background flush loop that owns the retry logic.
+
+This is the right default for almost every production service. A dead ingest endpoint should degrade observability, not customer-facing behavior.
+
+## Opt-in — `TRULAYER_FAIL_MODE=block`
+
+Set `TRULAYER_FAIL_MODE=block` to make `client.shutdown()` (and the flush that runs during shutdown) raise a typed `TruLayerFlushError` when a batch exhausts its retries.
+
+```typescript
+import { TruLayer, TruLayerFlushError } from "@trulayer/sdk";
+
+process.env.TRULAYER_FAIL_MODE = "block";
+
+const tl = new TruLayer({
+  apiKey: process.env.TRULAYER_API_KEY!,
+  projectName: "critical-eval-pipeline",
+});
+
+try {
+  await tl.trace("nightly-eval", async (trace) => {
+    /* ... */
+  });
+  await tl.shutdown();
+} catch (err) {
+  if (err instanceof TruLayerFlushError) {
+    // Alert, mark the run as failed, or abort the job deliberately.
+    console.error(
+      `ingest failed: ${err.message} (batch size ${err.batchSize})`,
+      err.cause,
+    );
+    process.exit(1);
+  }
+  throw err;
+}
+```
+
+`TruLayerFlushError` exposes two fields:
+
+- `batchSize: number` — number of traces in the failed batch.
+- `cause: unknown` — the underlying network or HTTP error.
+
+### When to use block mode
+
+Block mode is a niche tool. Reach for it only when:
+
+- The workload is a **batch job** whose entire value depends on TruLayer receiving the output (eval pipelines, backfills, scheduled quality runs).
+- Silently losing traces is **materially worse** than surfacing an error to the operator.
+- The caller is prepared to handle `TruLayerFlushError` — typically by failing the job and retrying the whole run.
+
+Do **not** use block mode for:
+
+- User-facing request handlers (HTTP routes, gRPC servers). A transient ingest outage will cascade into customer-visible failures.
+- Background services that must survive observability outages (payment processors, auth flows, webhooks).
+
+## Zero-network — `TRULAYER_MODE=local`
+
+For CI and offline development, set `TRULAYER_MODE=local`. The SDK swaps the HTTP sender for an in-memory `LocalBatchSender` that stores every trace for inspection, never touches the network, and never warns.
+
+```bash
+TRULAYER_MODE=local pnpm test
+```
+
+Combine with the [`@trulayer/sdk/testing`](./testing) helpers for assertions on captured traces.
+
+## Replay — `TRULAYER_MODE=replay`
+
+Set `TRULAYER_MODE=replay` together with `TRULAYER_REPLAY_FILE=<path>` to load a previously captured JSONL file on `init()`. Useful for golden-file regression tests and reproducing a production trace locally.
+
+```bash
+TRULAYER_MODE=replay \
+TRULAYER_REPLAY_FILE=fixtures/golden.jsonl \
+  pnpm vitest run
+```
+
+`TRULAYER_MODE=replay` implies `local` — replayed traces never escape to the live API, because they were produced by a previous capture and would double-count in the dashboard. Malformed JSONL lines are skipped with a warning.
+
+## Decision guide
+
+| Scenario | Recommended mode |
+| --- | --- |
+| Production HTTP service | Default (drop + warn) |
+| Background worker with SLO on ingest | Default (drop + warn) |
+| Nightly eval / backfill job | `TRULAYER_FAIL_MODE=block` |
+| CI unit tests | `TRULAYER_MODE=local` |
+| CI integration tests against a golden capture | `TRULAYER_MODE=replay` + `TRULAYER_REPLAY_FILE` |
+| Local development without an API key | `TRULAYER_MODE=local` |
+
+## See also
+
+- [Testing helpers](./testing) — in-memory assertions against captured traces.
+- [TypeScript SDK reference](./reference) — full type signatures for `TruLayerFlushError` and the error hierarchy.
