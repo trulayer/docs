@@ -261,6 +261,22 @@ paths:
           in: query
           description: Maximum trace latency in milliseconds (inclusive). Must be a non-negative integer and greater than or equal to latency_min when both are supplied.
           schema: { type: integer, minimum: 0 }
+        - name: token_count_min
+          in: query
+          description: |
+            Minimum total token count (prompt + completion, summed across
+            spans) for the trace (inclusive). Must be a non-negative
+            integer. Traces ingested before the column existed report
+            `total_token_count = 0` and are therefore excluded by any
+            non-zero minimum.
+          schema: { type: integer, minimum: 0 }
+        - name: token_count_max
+          in: query
+          description: |
+            Maximum total token count for the trace (inclusive). Must be a
+            non-negative integer and greater than or equal to
+            `token_count_min` when both are supplied.
+          schema: { type: integer, minimum: 0 }
         - name: cursor
           in: query
           schema: { type: string }
@@ -2662,6 +2678,14 @@ components:
         model: { type: string, nullable: true }
         latency_ms: { type: integer, nullable: true }
         cost: { type: number, nullable: true }
+        total_token_count:
+          description: |
+            Sum of prompt_tokens + completion_tokens across every span on
+            the trace, computed at ingest time. Zero when no span reports
+            token usage. Queryable via `token_count_min` /
+            `token_count_max` on `GET /v1/traces`.
+          type: integer
+          nullable: true
         error: { type: boolean }
         tags: { type: array, items: { type: string } }
         metadata: { type: object, additionalProperties: true }
