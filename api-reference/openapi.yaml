@@ -3263,7 +3263,17 @@ components:
             `token_count_min` / `token_count_max` on `GET /v1/traces`.
           type: integer
           nullable: true
-        error: { type: boolean }
+        error:
+          description: |
+            Raw error message from the trace (or null when the trace
+            succeeded). The spec previously declared this as a boolean,
+            which was drift from the implementation: the dashboard's
+            `Trace` type has always read it as `string | null` and
+            renders it directly into a `<pre>` block. The handler now
+            serialises the underlying nullable string column instead of
+            a synthetic bool, so clients see the actual error text.
+          type: string
+          nullable: true
         tags: { type: array, items: { type: string } }
         tag_map:
           description: |
