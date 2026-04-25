@@ -1059,12 +1059,12 @@ interface TraceData {
   model: string | null
   latency_ms: number | null
   cost: number | null
-  error: boolean
+  error: string | null
   tags: string[]
   metadata: Record<string, unknown>
   spans: SpanData[]
-  started_at: string               // ISO 8601
-  ended_at: string | null          // ISO 8601
+  started_at: string               // ISO 8601 (SDK-side field name)
+  ended_at: string | null          // ISO 8601 (SDK-side field name)
 }
 ```
 
@@ -1081,15 +1081,14 @@ interface SpanData {
   span_type: SpanType
   input: string | null
   output: string | null
-  error: boolean
-  error_message: string | null
+  error: string | null
   latency_ms: number | null
   model: string | null
   prompt_tokens: number | null
   completion_tokens: number | null
   metadata: Record<string, unknown>
-  started_at: string               // ISO 8601
-  ended_at: string | null          // ISO 8601
+  started_at: string               // ISO 8601 (SDK-side field name)
+  ended_at: string | null          // ISO 8601 (SDK-side field name)
 }
 ```
 
@@ -1112,7 +1111,7 @@ interface FeedbackData {
 ### `SpanType`
 
 ```typescript
-type SpanType = 'llm' | 'tool' | 'retrieval' | 'chain' | 'default'
+type SpanType = 'llm' | 'tool' | 'retrieval' | 'other'
 ```
 
 Controls the icon and grouping in the TruLayer dashboard.
@@ -1122,8 +1121,7 @@ Controls the icon and grouping in the TruLayer dashboard.
 | `"llm"` | LLM completion calls |
 | `"tool"` | Function / tool calls in an agent |
 | `"retrieval"` | Vector store / document retrieval |
-| `"chain"` | Multi-step pipelines or sequential steps |
-| `"default"` | Everything else |
+| `"other"` | Everything else |
 
 ---
 
