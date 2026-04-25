@@ -416,7 +416,7 @@ The active `TraceContext` is stored in a `contextvars.ContextVar` and can be ret
 ### `span`
 
 ```python
-trace.span(name: str, span_type: str = "default") -> SpanContext
+trace.span(name: str, span_type: str = "other") -> SpanContext
 ```
 
 Create a child `SpanContext`. Use as a sync or async context manager.
@@ -426,7 +426,7 @@ Create a child `SpanContext`. Use as a sync or async context manager.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `name` | `str` | — | Span name |
-| `span_type` | `str` | `"default"` | One of `"llm"`, `"retrieval"`, `"tool"`, `"chain"`, `"agent"`, `"default"` |
+| `span_type` | `str` | `"other"` | One of `"llm"`, `"retrieval"`, `"tool"`, `"other"` |
 
 **Returns** `SpanContext`
 
@@ -575,7 +575,7 @@ from trulayer import TraceData
 | `model` | `str \| None` | `None` | Model name |
 | `latency_ms` | `int \| None` | `None` | Duration in milliseconds (set automatically) |
 | `cost` | `float \| None` | `None` | Cost in USD |
-| `error` | `bool` | `False` | `True` if an exception was caught |
+| `error` | `str \| None` | `None` | Exception traceback string, or `None` if the trace succeeded |
 | `tags` | `list[str]` | `[]` | Tag list |
 | `metadata` | `dict[str, Any]` | `{}` | Arbitrary metadata |
 | `spans` | `list[SpanData]` | `[]` | Child spans |
@@ -595,11 +595,10 @@ from trulayer import SpanData
 | `id` | `str` | auto (UUIDv7) | Span identifier |
 | `trace_id` | `str` | `""` | Parent trace ID |
 | `name` | `str` | — | Span name |
-| `span_type` | `str` | `"default"` | `"llm"`, `"retrieval"`, `"tool"`, `"chain"`, `"agent"`, `"default"` |
+| `span_type` | `str` | `"other"` | `"llm"`, `"retrieval"`, `"tool"`, `"other"` |
 | `input` | `str \| None` | `None` | Input to this step |
 | `output` | `str \| None` | `None` | Output from this step |
-| `error` | `bool` | `False` | `True` if an exception was caught |
-| `error_message` | `str \| None` | `None` | Formatted traceback |
+| `error` | `str \| None` | `None` | Exception traceback string, or `None` if the span succeeded |
 | `latency_ms` | `int \| None` | `None` | Duration in milliseconds (set automatically) |
 | `model` | `str \| None` | `None` | Model name |
 | `prompt_tokens` | `int \| None` | `None` | Prompt token count |
