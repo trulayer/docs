@@ -151,7 +151,7 @@ Returned by `trace()` and `atrace()`. Key methods:
 | `set_output(value)` | Set the trace's output payload |
 | `set_metadata(**kwargs)` | Attach key-value metadata |
 | `set_error(exc)` | Mark the trace as errored with an exception |
-| `span(name, span_type="custom", ...)` | → `SpanContext` |
+| `span(name, span_type="other", ...)` | → `SpanContext` |
 | `.id` | Trace UUID (read-only) |
 | `.session_id` | Session identifier (read-only) |
 
@@ -196,7 +196,7 @@ class SpanData(BaseModel):
     id: UUID
     trace_id: UUID
     name: str
-    span_type: Literal["llm", "retrieval", "tool", "custom"]
+    span_type: Literal["llm", "retrieval", "tool", "other"]
     input: Any
     output: Any
     error: ErrorInfo | None
