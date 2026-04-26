@@ -181,7 +181,7 @@ class TraceData(BaseModel):
     name: str
     input: Any
     output: Any
-    error: ErrorInfo | None
+    error: str | None
     tags: list[str]
     metadata: dict[str, Any]
     spans: list[SpanData]
@@ -199,7 +199,7 @@ class SpanData(BaseModel):
     span_type: Literal["llm", "retrieval", "tool", "other"]
     input: Any
     output: Any
-    error: ErrorInfo | None
+    error: str | None
     latency_ms: int
     model: str | None
     prompt_tokens: int | None
