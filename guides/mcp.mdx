@@ -47,6 +47,32 @@ Add an entry to `~/Library/Application Support/Claude/claude_desktop_config.json
 
 Restart Claude Desktop. You will see a TruLayer tools indicator in the chat input bar.
 
+### Claude Code
+
+Install TruLayer as a Claude Code skill so you can query your traces and evals directly from the Claude Code CLI:
+
+```bash
+npx @trulayer/mcp install --client claude-code
+```
+
+Or add it manually to your project's `.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "trulayer": {
+      "command": "npx",
+      "args": ["-y", "@trulayer/mcp"],
+      "env": {
+        "TRULAYER_API_KEY": "tl_your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+Once installed, use `/mcp trulayer` in Claude Code to query your workspace.
+
 ### Cursor
 
 Open **Settings → MCP** and add:
