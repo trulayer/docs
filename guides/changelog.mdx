@@ -1,0 +1,23 @@
+---
+title: Changelog
+description: Recent API and SDK changes.
+---
+
+## 2026-04-25
+
+### SpanRequest: new optional fields `prompt_tokens` and `completion_tokens`
+
+The `POST /v1/ingest` and `POST /v1/ingest/batch` span objects now accept two new optional integer fields:
+
+- `prompt_tokens` — number of tokens in the LLM prompt
+- `completion_tokens` — number of tokens in the LLM completion
+
+These are additive (non-breaking). Existing ingestion calls are unaffected.
+
+### `Span.error` field: clarified as nullable string
+
+The `error` field on span response objects has always carried a nullable string error message on the wire, despite earlier SDK documentation describing it as a boolean. The field declaration is now correctly documented as `string | null`. No wire format change — this is a documentation correction only.
+
+### `SpanType` default corrected to `"other"`
+
+The default span type in SDK examples was incorrectly shown as `"custom"`. The correct default is `"other"`. No API behaviour change.
