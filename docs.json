@@ -106,6 +106,7 @@
             "pages": [
               "guides/semantic-search",
               "guides/model-routing",
+              "guides/mcp",
               "guides/otlp",
               "guides/ci-eval-gate",
               "guides/audit-verify",

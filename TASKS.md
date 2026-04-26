@@ -38,6 +38,9 @@ This repo doesn't ship runtime code, so the backend/frontend "tests required" ru
 - [x] `api-reference/introduction.mdx` — auth, base URL, errors, rate limits
 - [x] `development.mdx` — contributor guide
 
+### Content — shipped after initial round
+- [x] `guides/mcp.mdx` — MCP server install, configuration (Claude Desktop, Cursor, VS Code, custom hosts), available tools, semantic search from agents, troubleshooting
+
 ### Content — pending (tracked in Linear)
 
 - [x] TypeScript SDK — tutorial, configuration, reference → [TRU-92](https://linear.app/omnimoda/issue/TRU-92)

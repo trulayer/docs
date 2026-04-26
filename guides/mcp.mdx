@@ -1,0 +1,165 @@
+---
+title: "MCP server and skills"
+description: "Install the TruLayer MCP server to give AI agents and IDEs direct access to your traces, evals, and metrics."
+---
+
+The TruLayer MCP server exposes your observability data as tools that any MCP-compatible host can call — Claude Desktop, Cursor, Windsurf, VS Code Copilot, or your own AI agent. Instead of copy-pasting trace IDs from the dashboard, agents can query traces, fetch eval results, and search spans in context.
+
+## Prerequisites
+
+- Node.js 18+ or Python 3.11+
+- A TruLayer API key (`tl_...`) — get one from **Dashboard → Settings → API keys**
+- An MCP-compatible host (Claude Desktop, Cursor, Windsurf, VS Code with GitHub Copilot, or a custom agent)
+
+## Install
+
+The TruLayer MCP server is published to npm. Install it globally or let your MCP host fetch it on demand:
+
+```bash
+npm install -g @trulayer/mcp
+```
+
+Or run it directly without installing:
+
+```bash
+npx @trulayer/mcp
+```
+
+## Configure your host
+
+### Claude Desktop
+
+Add an entry to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "trulayer": {
+      "command": "npx",
+      "args": ["@trulayer/mcp"],
+      "env": {
+        "TRULAYER_API_KEY": "tl_your_key_here"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Desktop. You will see a TruLayer tools indicator in the chat input bar.
+
+### Cursor
+
+Open **Settings → MCP** and add:
+
+```json
+{
+  "trulayer": {
+    "command": "npx",
+    "args": ["@trulayer/mcp"],
+    "env": {
+      "TRULAYER_API_KEY": "tl_your_key_here"
+    }
+  }
+}
+```
+
+### VS Code (GitHub Copilot)
+
+Add to your workspace or user `settings.json`:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "trulayer": {
+        "command": "npx",
+        "args": ["@trulayer/mcp"],
+        "env": {
+          "TRULAYER_API_KEY": "tl_your_key_here"
+        }
+      }
+    }
+  }
+}
+```
+
+### Environment variable (recommended for CI / agent runtimes)
+
+Set `TRULAYER_API_KEY` in your environment and run the server as a subprocess:
+
+```bash
+export TRULAYER_API_KEY=tl_your_key_here
+npx @trulayer/mcp
+```
+
+## Available tools (skills)
+
+Once connected, the following tools are available to your MCP host:
+
+| Tool | Description |
+| ---- | ----------- |
+| `list_traces` | List recent traces for a project, with optional time bounds and pagination. |
+| `get_trace` | Fetch all spans for a single trace by ID. |
+| `search_spans` | Semantic search over spans — find spans by meaning, not just exact text. |
+| `list_evals` | List eval runs for a project, filtered by scorer and time range. |
+| `get_eval` | Fetch a single eval run with per-span scores. |
+| `list_metrics` | Pull aggregated latency, token, and cost metrics for a project. |
+| `list_feedback` | Fetch user feedback events attached to traces. |
+| `get_project` | Resolve a project name to its UUID — useful as a first step in a multi-tool workflow. |
+
+## Example interaction
+
+Once the server is running, you can ask your AI host natural-language questions about your traces:
+
+> "Show me the 10 most recent traces for the `customer-support` project and summarize which ones have failing evals."
+
+The host calls `get_project` to resolve the name, then `list_traces`, then `list_evals` for each trace ID — all without you writing a single API call.
+
+## Scoping with API key permissions
+
+The MCP server authenticates as the API key you provide. Use a key scoped to `read` if you only need query access — no write permissions are required for any MCP tool. See [API key scopes](/guides/api-key-scopes) for how to create a read-only key.
+
+## Semantic search from an agent
+
+The `search_spans` tool wraps the same endpoint as [Semantic search](/guides/semantic-search). When your agent calls it with a natural-language query, TruLayer embeds the text server-side and returns the most similar spans. This requires a BYOK embedding key configured in **Dashboard → Settings → Evaluators**.
+
+## Adding TruLayer to a custom MCP host
+
+If you are building your own MCP host or agent framework, connect to the server over stdio:
+
+```typescript
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+const transport = new StdioClientTransport({
+  command: "npx",
+  args: ["@trulayer/mcp"],
+  env: { TRULAYER_API_KEY: process.env.TRULAYER_API_KEY },
+});
+
+const client = new Client({ name: "my-agent", version: "1.0.0" }, {});
+await client.connect(transport);
+
+const result = await client.callTool({
+  name: "list_traces",
+  arguments: { project_id: "<your-project-uuid>", limit: 20 },
+});
+```
+
+## Troubleshooting
+
+**The server starts but returns no tools**
+Check that `TRULAYER_API_KEY` is set and valid. Run `npx @trulayer/mcp --version` to confirm the package loaded.
+
+**`search_spans` returns a `502`**
+A BYOK embedding key is required for text-based search. Configure one in **Dashboard → Settings → Evaluators**.
+
+**The host does not show TruLayer tools**
+Some hosts require a restart after adding an MCP server. Check the host's MCP logs for connection errors.
+
+## See also
+
+- [API key scopes](/guides/api-key-scopes) — scope your key to read-only for MCP use
+- [Semantic search](/guides/semantic-search) — the underlying search endpoint the MCP server calls
+- [Traces and spans](/concepts/traces-and-spans) — data model the tools return
+- [API reference](/api-reference/introduction) — raw endpoints if you prefer direct HTTP
