@@ -109,7 +109,8 @@
               "guides/otlp",
               "guides/ci-eval-gate",
               "guides/audit-verify",
-              "guides/api-key-scopes"
+              "guides/api-key-scopes",
+              "guides/changelog"
             ]
           },
           {
