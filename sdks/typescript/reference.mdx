@@ -77,7 +77,7 @@ Passed to the `trace()` callback.
 ```typescript
 await trace.span(
   name: string,
-  type: "llm" | "retrieval" | "tool" | "custom",
+  type: "llm" | "retrieval" | "tool" | "other",
   fn: (span: SpanContext) => Promise<T> | T,
 ): Promise<T>
 ```
@@ -148,7 +148,7 @@ import type {
   TruLayerConfig,
   TraceData,
   SpanData,
-  SpanType,       // "llm" | "retrieval" | "tool" | "custom"
+  SpanType,       // "llm" | "retrieval" | "tool" | "other"
   FeedbackData,
   EvalResult,
   Metrics,
