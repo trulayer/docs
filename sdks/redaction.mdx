@@ -33,7 +33,7 @@ r = Redactor(
     ],
 )
 
-trulayer.init(api_key="...", project="my-app", redactor=r)
+trulayer.init(api_key="...", project_name="my-app", redactor=r)
 # All auto-instrumented spans are now scrubbed before leaving your network.
 ```
 
@@ -46,7 +46,7 @@ const redactor = new Redactor({
   rules: [{ name: "employee_id", pattern: /EMP-\d{6}/g, replacement: "<REDACTED:employee_id>" }],
 });
 
-const tl = new TruLayer({ apiKey: process.env.TRULAYER_API_KEY!, project: "my-app", redactor });
+const tl = new TruLayer({ apiKey: process.env.TRULAYER_API_KEY!, projectName: "my-app", redactor });
 ```
 </CodeGroup>
 

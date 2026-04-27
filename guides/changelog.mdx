@@ -3,6 +3,19 @@ title: Changelog
 description: Recent API and SDK changes.
 ---
 
+## 2026-04-27
+
+### SDK constructor parameter renamed: `project` → `projectName` (TypeScript) / `project_name` (Python)
+
+The `project` constructor parameter was never a valid field on `TruLayerConfig` (TypeScript) or `TruLayerClient` (Python). The correct parameter names are:
+
+- **TypeScript:** `projectName: string` — pass to `new TruLayer({ projectName: "..." })` or `init({ projectName: "..." })`
+- **Python:** `project_name: str` — pass to `trulayer.init(project_name="...")` or `TruLayerClient(project_name="...")`
+
+The old `projectId` (TypeScript) / `project_id` (Python) aliases remain accepted but are deprecated and will be removed in SDK 0.3.x. Documentation examples in the quickstart and SDK references have been corrected.
+
+---
+
 ## April 26, 2026
 
 ### @trulayer/mcp — MCP server for AI-native tooling

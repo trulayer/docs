@@ -19,7 +19,7 @@ import trulayer
 
 trulayer.init(
     api_key=os.environ["TRULAYER_API_KEY"],
-    project="tutorial",       # any string — creates projects on first use
+    project_name="tutorial",   # any string — creates projects on first use
     environment="development", # free-form; used as a filter in the dashboard
 )
 ```
@@ -207,7 +207,7 @@ def scrub(value):
 
 trulayer.init(
     api_key=os.environ["TRULAYER_API_KEY"],
-    project="prod",
+    project_name="prod",
     scrub_fn=scrub,
 )
 ```
@@ -233,7 +233,7 @@ In short-lived scripts, ensure `trulayer.shutdown()` is called so buffered trace
 import atexit
 import trulayer
 
-trulayer.init(api_key="...", project="...")
+trulayer.init(api_key="...", project_name="...")
 atexit.register(trulayer.shutdown)
 ```
 

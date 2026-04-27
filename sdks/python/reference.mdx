@@ -20,15 +20,16 @@ Initialise the global client. Call once at app startup.
 ```python
 trulayer.init(
     api_key: str,
-    project: str,
+    project_name: str,                                        # human-readable project name
+    project_id: str | None = None,                           # deprecated — use project_name. Removed in 0.3.x.
     environment: str = "production",
     endpoint: str = "https://api.trulayer.ai",
     batch_size: int = 50,
     flush_interval: float = 2.0,
     timeout: float = 5.0,
     sample_rate: float = 1.0,
-    scrub_fn: Callable[[Any], Any] | None = None,
-    metadata_validator: Callable[[dict], bool] | None = None,
+    scrub_fn: Callable[[str], str] | None = None,
+    metadata_validator: Callable[[dict], None] | None = None,
     debug: bool = False,
 ) -> TruLayerClient
 ```
@@ -124,7 +125,7 @@ Explicit client for multi-tenant apps or tests. Prefer `init()` + `get_client()`
 ```python
 from trulayer import TruLayerClient
 
-client = TruLayerClient(api_key="...", project="...")
+client = TruLayerClient(api_key="...", project_name="...")
 with client.trace("work") as trace:
     ...
 ```

@@ -21,7 +21,7 @@ import trulayer
 
 trulayer.init(
     api_key=os.environ["TRULAYER_API_KEY"],
-    project="my-app",
+    project_name="my-app",
 )
 
 with trulayer.trace("do_work") as trace:

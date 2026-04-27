@@ -8,15 +8,16 @@ description: "Every option you can pass to trulayer.init()."
 | Option | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
 | `api_key` | `str` | required | Your TruLayer API key (`tl_...`) |
-| `project` | `str` | required | Project identifier — any string; created on first use |
+| `project_name` | `str` | required | Human-readable project name; created on first use |
+| `project_id` | `str \| None` | `None` | Deprecated alias for `project_name`. Removed in 0.3.x. |
 | `environment` | `str` | `"production"` | Free-form label; filter in the dashboard |
 | `endpoint` | `str` | `https://api.trulayer.ai` | Override for self-hosted or private deployments |
 | `batch_size` | `int` | `50` | Flush when this many spans are buffered |
 | `flush_interval` | `float` | `2.0` | Flush after this many seconds, whichever comes first |
 | `timeout` | `float` | `5.0` | HTTP request timeout in seconds |
 | `sample_rate` | `float` | `1.0` | Fraction of traces to send (0.0 – 1.0) |
-| `scrub_fn` | `Callable[[Any], Any] \| None` | `None` | Run every input/output through this function before ingest |
-| `metadata_validator` | `Callable[[dict], bool] \| None` | `None` | Return `False` to reject malformed metadata |
+| `scrub_fn` | `Callable[[str], str] \| None` | `None` | Run every input/output string through this function before ingest |
+| `metadata_validator` | `Callable[[dict], None] \| None` | `None` | Raise to reject malformed metadata |
 | `debug` | `bool` | `False` | Log trace payloads locally instead of (or in addition to) sending |
 
 ## Example — production
@@ -36,7 +37,7 @@ def scrub(value):
 
 trulayer.init(
     api_key=os.environ["TRULAYER_API_KEY"],
-    project="prod",
+    project_name="prod",
     environment="production",
     sample_rate=1.0,              # keep at 1.0 unless ingest cost is an issue
     batch_size=50,
@@ -52,7 +53,7 @@ For CI, local development without network to the TruLayer backend, or sandboxed 
 ```python
 trulayer.init(
     api_key="tl_local",
-    project="dev",
+    project_name="dev",
     debug=True,         # log payloads to stdout instead of shipping
 )
 ```
@@ -62,7 +63,7 @@ Or point at a mock server:
 ```python
 trulayer.init(
     api_key="tl_local",
-    project="dev",
+    project_name="dev",
     endpoint="http://localhost:4010",
 )
 ```
@@ -77,7 +78,7 @@ For deterministic sampling (same trace always in or out based on its ID), use th
 import random
 trulayer.init(
     api_key="...",
-    project="...",
+    project_name="...",
     sample_rate=lambda: random.random() < 0.1,
 )
 ```
