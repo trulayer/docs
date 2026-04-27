@@ -23,7 +23,7 @@ import os
 from openai import OpenAI
 import trulayer
 
-trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project="my-app")
+trulayer.init(api_key=os.environ["TRULAYER_API_KEY"], project_name="my-app")
 
 client = OpenAI()
 trulayer.instrument_openai(client)
@@ -35,7 +35,7 @@ import { TruLayer, instrumentOpenAI } from "@trulayer/sdk";
 
 const tl = new TruLayer({
   apiKey: process.env.TRULAYER_API_KEY!,
-  project: "my-app",
+  projectName: "my-app",
 });
 
 const openai = instrumentOpenAI(new OpenAI(), tl);

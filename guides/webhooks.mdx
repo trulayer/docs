@@ -1,0 +1,147 @@
+---
+title: Webhooks
+description: Receive real-time event notifications from TruLayer by registering an HTTPS endpoint.
+---
+
+TruLayer can POST a signed JSON payload to a URL you own whenever a monitored event fires — for example, when a failure is detected in your traces. This guide covers registration, signature verification, the test-ping endpoint, and URL validation rules.
+
+Webhooks are available on **Pro plan and above**. Creating and deleting webhooks requires the **Member** or **Owner** role.
+
+## Register a webhook
+
+```http
+POST /v1/webhooks
+Authorization: Bearer <api-key>
+Content-Type: application/json
+```
+
+```json
+{
+  "url": "https://your-app.example.com/hooks/trulayer",
+  "secret": "at-least-16-chars-random-secret",
+  "events": ["failure.detected"],
+  "enabled": true
+}
+```
+
+| Field | Type | Required | Description |
+| ----- | ---- | -------- | ----------- |
+| `url` | string (URI) | Yes | HTTPS endpoint TruLayer posts events to. Must satisfy the [URL requirements](#url-requirements) below. |
+| `secret` | string | Yes | Minimum 16 characters. Used to compute the `X-TruLayer-Signature` header on every delivery. |
+| `events` | string[] | No | Event types to subscribe to. Defaults to `["failure.detected"]`. |
+| `enabled` | boolean | No | Whether deliveries are active. Defaults to `true`. |
+
+A successful response is `201 Created` with the new `Webhook` object.
+
+## URL requirements
+
+TruLayer validates the URL at creation time. The request returns `422` if any of these checks fail:
+
+| Error key | Meaning |
+| --------- | ------- |
+| `webhook.url.not_https` | The URL scheme is not `https`. HTTP URLs are not accepted. |
+| `webhook.url.private_ip` | The URL hostname resolves to a private, loopback, or link-local IP address. This protects against SSRF. |
+| `webhook.url.unresolvable` | The URL hostname could not be resolved via DNS at registration time. |
+
+Example `422` response:
+
+```json
+{
+  "error": "webhook.url.not_https"
+}
+```
+
+## Verify a webhook before enabling it
+
+Use `POST /v1/webhooks/:id/test` to send a synthetic ping event to your endpoint and inspect the response, without waiting for a real event to fire.
+
+```http
+POST /v1/webhooks/018f1234-5678-7abc-def0-123456789abc/test
+Authorization: Bearer <api-key>
+```
+
+No request body is required.
+
+**Response `200 OK`:**
+
+```json
+{
+  "status": 204,
+  "body": ""
+}
+```
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `status` | integer | The HTTP status code your endpoint returned. `0` means TruLayer could not reach the endpoint (DNS failure, refused connection, TLS error, or timeout). |
+| `body` | string | The first 4 KB of the response body your endpoint returned. Useful for debugging rejection messages. |
+
+The test delivery is signed with the same HMAC-SHA256 scheme used for live deliveries, so you can fully exercise your signature-verification logic. The delivery is **ephemeral** — it does not appear in the delivery log.
+
+### Auth and plan requirements
+
+`POST /v1/webhooks/:id/test` requires:
+- Bearer token authentication (same as all other `/v1/` endpoints)
+- **Pro plan or above** — Starter plan tenants receive `403`
+- **Member or Owner** role — Viewer role receives `403`
+
+### Error responses
+
+| Status | Meaning |
+| ------ | ------- |
+| `404` | Webhook not found, or belongs to a different tenant |
+| `403` | Insufficient plan or role |
+| `422` | The webhook URL failed validation (see [URL requirements](#url-requirements)) |
+
+## Signature verification
+
+Every delivery — live or synthetic — includes an `X-TruLayer-Signature` header. Verify it before processing the payload.
+
+The header value is `sha256=<hex>`, where the hex string is the HMAC-SHA256 of the raw request body using the `secret` you provided at registration time.
+
+<CodeGroup>
+```python Python
+import hashlib
+import hmac
+
+def verify_signature(body: bytes, secret: str, header: str) -> bool:
+    expected = "sha256=" + hmac.new(
+        secret.encode(), body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, header)
+```
+
+```typescript TypeScript
+import { createHmac, timingSafeEqual } from "crypto";
+
+function verifySignature(body: Buffer, secret: string, header: string): boolean {
+  const expected = "sha256=" + createHmac("sha256", secret).update(body).digest("hex");
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(header));
+}
+```
+</CodeGroup>
+
+Always use a timing-safe comparison to prevent timing attacks.
+
+## Event types
+
+| Event | Fired when |
+| ----- | ---------- |
+| `failure.detected` | A failure is detected in your traces (matches a failure rule) |
+| `ping` | A synthetic test delivery via `POST /v1/webhooks/:id/test` |
+
+## List and delete webhooks
+
+List all webhooks for your tenant:
+
+```http
+GET /v1/webhooks
+Authorization: Bearer <api-key>
+```
+
+Delete a webhook (Owner role required):
+
+```http
+DELETE /v1/webhooks/:id
+Authorization: Bearer <api-key>
+```

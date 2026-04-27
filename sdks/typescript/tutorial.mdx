@@ -16,7 +16,7 @@ import { TruLayer } from "@trulayer/sdk";
 
 const tl = new TruLayer({
   apiKey: process.env.TRULAYER_API_KEY!,
-  project: "tutorial",
+  projectName: "tutorial",
   environment: "development",
 });
 ```
@@ -138,7 +138,7 @@ export async function register() {
 
     const tl = new TruLayer({
       apiKey: process.env.TRULAYER_API_KEY!,
-      project: "web",
+      projectName: "web",
     });
 
     // Make the patched client available to your routes
@@ -226,7 +226,7 @@ Return `trace.id` from your handler so the client can attach feedback to the rig
 ```typescript
 const tl = new TruLayer({
   apiKey: process.env.TRULAYER_API_KEY!,
-  project: "prod",
+  projectName: "prod",
   scrubFn: (value) => {
     if (typeof value === "string") {
       return value

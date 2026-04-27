@@ -46,7 +46,7 @@ def scrub(value):
         return EMAIL.sub("[email]", value)
     return value
 
-trulayer.init(api_key=..., project="prod", scrub_fn=scrub)
+trulayer.init(api_key=..., project_name="prod", scrub_fn=scrub)
 ```
 
 ```typescript TypeScript
@@ -56,8 +56,8 @@ const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
 
 init({
   apiKey: process.env.TRULAYER_API_KEY,
-  project: "prod",
-  scrubFn: (value) =>
+  projectName: "prod",
+  redact: (value) =>
     typeof value === "string" ? value.replace(EMAIL, "[email]") : value,
 });
 ```
@@ -114,7 +114,7 @@ import os
 os.environ["TRULAYER_MODE"] = "local"
 
 import trulayer
-trulayer.init(project="tests")  # no api_key needed in local mode
+trulayer.init(project_name="tests")  # no api_key needed in local mode
 
 with trulayer.trace("unit-test") as t:
     t.set_output({"ok": True})
@@ -128,7 +128,7 @@ assert trulayer.testing.last_trace().name == "unit-test"
 process.env.TRULAYER_MODE = "local";
 
 import { init, trace, testing } from "@trulayer/sdk";
-init({ project: "tests" }); // no apiKey needed in local mode
+init({ projectName: "tests" }); // no apiKey needed in local mode
 
 await trace("unit-test", async (t) => {
   t.setOutput({ ok: true });

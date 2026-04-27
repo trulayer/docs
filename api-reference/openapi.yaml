@@ -2419,6 +2419,39 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /v1/webhooks/{id}/test:
+    post:
+      operationId: testWebhook
+      tags: [webhooks]
+      summary: Send a synthetic ping event to verify a webhook endpoint
+      description: |
+        Sends a `{type: "ping", webhook_id, sent_at}` payload to the
+        webhook's configured endpoint, signed with the same HMAC-SHA256
+        scheme used for live deliveries. Returns the destination's HTTP
+        status and (truncated) response body. The delivery is ephemeral
+        and is not written to the delivery log. Same RBAC as create
+        (member+) and plan gate (Pro+).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Test delivery completed; destination response captured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TestWebhookResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /v1/apikeys/{id}:
     delete:
       operationId: revokeAPIKey
@@ -4546,6 +4579,19 @@ components:
         webhooks:
           type: array
           items: { $ref: "#/components/schemas/Webhook" }
+
+    TestWebhookResponse:
+      type: object
+      required: [status, body]
+      description: |
+        Result of a `POST /v1/webhooks/{id}/test` synthetic delivery.
+        `status` is the destination's HTTP response code, or `0` when the
+        destination was unreachable (DNS failure, refused connection,
+        TLS error, timeout). `body` is the destination response body
+        truncated at 4 KiB.
+      properties:
+        status: { type: integer, description: "Destination HTTP status, or 0 on transport error" }
+        body:   { type: string,  description: "Destination response body, truncated at 4 KiB" }
 
     # ── Anomalies ──────────────────────────────────────────────────────────────
 

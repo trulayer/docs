@@ -69,7 +69,7 @@ import trulayer
 
 trulayer.init(
     api_key=os.environ["TRULAYER_API_KEY"],
-    project="quickstart",
+    project_name="quickstart",
 )
 
 client = OpenAI()
@@ -89,7 +89,7 @@ import { TruLayer, instrumentOpenAI } from "@trulayer/sdk";
 
 const tl = new TruLayer({
   apiKey: process.env.TRULAYER_API_KEY!,
-  project: "quickstart",
+  projectName: "quickstart",
 });
 
 const openai = instrumentOpenAI(new OpenAI(), tl);

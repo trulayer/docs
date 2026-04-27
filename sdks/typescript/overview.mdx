@@ -21,7 +21,7 @@ import OpenAI from "openai";
 
 const tl = new TruLayer({
   apiKey: process.env.TRULAYER_API_KEY!,
-  project: "my-app",
+  projectName: "my-app",
 });
 
 const openai = instrumentOpenAI(new OpenAI(), tl);

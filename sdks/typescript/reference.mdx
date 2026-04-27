@@ -20,15 +20,16 @@ import { TruLayer } from "@trulayer/sdk";
 
 const tl = new TruLayer({
   apiKey: string,
-  project: string,
+  projectName: string,          // human-readable project name
+  projectId?: string,           // @deprecated — use projectName. Removed in 0.3.x.
   environment?: string,
   endpoint?: string,
   batchSize?: number,
   flushInterval?: number,
   timeout?: number,
   sampleRate?: number | (() => boolean),
-  scrubFn?: (value: unknown) => unknown,
-  metadataValidator?: (meta: Record<string, unknown>) => boolean,
+  redact?: (value: unknown) => unknown,
+  relayUrl?: string,
   debug?: boolean,
 });
 ```
@@ -134,7 +135,7 @@ If you prefer a global pattern over passing `tl` explicitly:
 ```typescript
 import { init, getClient } from "@trulayer/sdk";
 
-init({ apiKey: "...", project: "..." });
+init({ apiKey: "...", projectName: "..." });
 
 const tl = getClient();
 ```

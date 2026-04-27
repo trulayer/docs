@@ -19,7 +19,7 @@ import { TruLayer, instrumentVercelAI } from "@trulayer/sdk";
 
 const tl = new TruLayer({
   apiKey: process.env.TRULAYER_API_KEY!,
-  project: "my-app",
+  projectName: "my-app",
 });
 
 const ai = instrumentVercelAI(tl, { generateText, streamText, generateObject });
@@ -36,7 +36,7 @@ import { streamText } from "ai";
 
 export const runtime = "nodejs"; // required — edge runtime is not supported
 
-const tl = new TruLayer({ apiKey: process.env.TRULAYER_API_KEY!, project: "chat" });
+const tl = new TruLayer({ apiKey: process.env.TRULAYER_API_KEY!, projectName: "chat" });
 const ai = instrumentVercelAI(tl, { streamText });
 
 export async function POST(req: Request) {

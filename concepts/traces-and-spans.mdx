@@ -35,7 +35,7 @@ Spans can be **nested** — an agent loop might have an outer `custom` span for 
 ```python Python
 import trulayer
 
-trulayer.init(api_key="...", project="rag-app")
+trulayer.init(api_key="...", project_name="rag-app")
 
 with trulayer.trace("answer_question") as trace:
     trace.set_input({"question": question})
@@ -59,7 +59,7 @@ with trulayer.trace("answer_question") as trace:
 ```typescript TypeScript
 import { TruLayer } from "@trulayer/sdk";
 
-const tl = new TruLayer({ apiKey: "...", project: "rag-app" });
+const tl = new TruLayer({ apiKey: "...", projectName: "rag-app" });
 
 await tl.trace("answer_question", async (trace) => {
   trace.setInput({ question });
@@ -95,7 +95,7 @@ For OpenAI, Anthropic, LangChain, and a growing list of frameworks, you don't ne
 import trulayer
 from openai import OpenAI
 
-trulayer.init(api_key="...", project="rag-app")
+trulayer.init(api_key="...", project_name="rag-app")
 
 client = OpenAI()
 trulayer.instrument_openai(client)
@@ -107,7 +107,7 @@ trulayer.instrument_openai(client)
 import { TruLayer, instrumentOpenAI } from "@trulayer/sdk";
 import OpenAI from "openai";
 
-const tl = new TruLayer({ apiKey: "...", project: "rag-app" });
+const tl = new TruLayer({ apiKey: "...", projectName: "rag-app" });
 const openai = instrumentOpenAI(new OpenAI(), tl);
 // Every openai.chat.completions.create() call is now traced.
 ```

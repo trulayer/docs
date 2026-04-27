@@ -104,6 +104,7 @@
           {
             "group": "Guides",
             "pages": [
+              "guides/webhooks",
               "guides/semantic-search",
               "guides/model-routing",
               "guides/mcp",

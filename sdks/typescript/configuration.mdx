@@ -8,15 +8,16 @@ description: "Every option you can pass to the TruLayer constructor."
 | Option | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
 | `apiKey` | `string` | required | TruLayer API key (`tl_...`) |
-| `project` | `string` | required | Project identifier — any string |
+| `projectName` | `string` | required | Human-readable project name |
+| `projectId` | `string` | — | Deprecated alias for `projectName`. Removed in 0.3.x. |
 | `environment` | `string` | `"production"` | Filter label |
 | `endpoint` | `string` | `https://api.trulayer.ai` | Override for self-hosted |
 | `batchSize` | `number` | `50` | Spans per flush |
 | `flushInterval` | `number` | `2000` | ms between flushes |
 | `timeout` | `number` | `5000` | HTTP timeout (ms) |
 | `sampleRate` | `number \| () => boolean` | `1.0` | Fraction of traces to send |
-| `scrubFn` | `(value: unknown) => unknown` | `undefined` | Redact inputs/outputs before ingest |
-| `metadataValidator` | `(meta: Record<string, unknown>) => boolean` | `undefined` | Return false to reject |
+| `redact` | `(value: unknown) => unknown` | `undefined` | Redact inputs/outputs before ingest |
+| `relayUrl` | `string` | `undefined` | Server-side relay URL for browser builds |
 | `debug` | `boolean` | `false` | Log payloads locally |
 
 ## Example — production
@@ -26,11 +27,11 @@ import { TruLayer } from "@trulayer/sdk";
 
 export const tl = new TruLayer({
   apiKey: process.env.TRULAYER_API_KEY!,
-  project: "prod",
+  projectName: "prod",
   environment: "production",
   batchSize: 50,
   flushInterval: 2000,
-  scrubFn: (value) => {
+  redact: (value) => {
     if (typeof value !== "string") return value;
     return value
       .replace(/\b[\w.+-]+@[\w.-]+\.\w{2,}\b/gi, "[email]")
@@ -44,7 +45,7 @@ export const tl = new TruLayer({
 ```typescript
 const tl = new TruLayer({
   apiKey: "tl_local",
-  project: "test",
+  projectName: "test",
   debug: true,
 });
 ```
@@ -54,7 +55,7 @@ Or mock server:
 ```typescript
 const tl = new TruLayer({
   apiKey: "tl_local",
-  project: "test",
+  projectName: "test",
   endpoint: "http://localhost:4010",
 });
 ```
