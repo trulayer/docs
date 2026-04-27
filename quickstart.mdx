@@ -92,21 +92,24 @@ const tl = new TruLayer({
   projectName: "quickstart",
 });
 
-const openai = instrumentOpenAI(new OpenAI(), tl);
+const openai = new OpenAI();
 
-const response = await openai.chat.completions.create({
-  model: "gpt-4o-mini",
-  messages: [{ role: "user", content: "Give me a one-sentence definition of observability." }],
+const response = await tl.trace("quickstart", async (t) => {
+  const wrapped = instrumentOpenAI(openai, t);
+  return wrapped.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: "Give me a one-sentence definition of observability." }],
+  });
 });
 
 console.log(response.choices[0].message.content);
 
-await tl.flush();
+await tl.shutdown();
 ```
 </CodeGroup>
 
 <Tip>
-  In short-lived scripts, always call `flush()` (TS) or let the process exit naturally after `trulayer.init()` — the SDK batches traces and needs a moment to ship them before exit.
+  In short-lived scripts, always call `shutdown()` (TS) or let the process exit naturally after `trulayer.init()` — the SDK batches traces and needs a moment to ship them before exit.
 </Tip>
 
 ## 5. View the trace

@@ -356,7 +356,7 @@ Span nesting is tracked automatically via `AsyncLocalStorage` on Node.js, Bun, a
 **Example**
 
 ```typescript
-const result = await t.span('embed-query', 'default', async (s) => {
+const result = await t.span('embed-query', 'retrieval', async (s) => {
   s.setModel('text-embedding-3-small')
   s.setInput(question)
   const vec = await embed(question)
@@ -445,6 +445,32 @@ Append a tag to the trace. Tags can also be set at trace open time via `options.
 
 ---
 
+### `TraceContext.setTag`
+
+```typescript
+setTag(key: string, value: string): this
+```
+
+Attach a structured key → value tag to the trace. Unlike `addTag`, structured tags are indexed server-side and filterable via the `tag_key` / `tag_value` query parameters on list endpoints.
+
+**Parameters**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `key` | `string` | Tag key. Max 64 characters. Max 20 keys per trace |
+| `value` | `string` | Tag value. Max 64 characters |
+
+**Returns** `this` for chaining.
+
+**Example**
+
+```typescript
+t.setTag('environment', 'production')
+t.setTag('region', 'us-west-2')
+```
+
+---
+
 ### `TraceContext.data`
 
 ```typescript
@@ -491,7 +517,7 @@ Open a nested child span under this span. The child's `parent_span_id` is set to
 **Example**
 
 ```typescript
-await t.span('outer', 'chain', async (outer) => {
+await t.span('outer', 'other', async (outer) => {
   await outer.span('inner-llm', 'llm', async (inner) => {
     inner.setInput(prompt)
     // inner.data.parent_span_id === outer.data.id
@@ -808,7 +834,7 @@ The handler responds to these LangChain callbacks:
 | Callback | Span name | Span type |
 |---|---|---|
 | `handleLLMStart` | LLM name (or `"llm"`) | `"llm"` |
-| `handleChainStart` | Chain name (or `"chain"`) | `"default"` |
+| `handleChainStart` | Chain name (or `"chain"`) | `"other"` |
 | `handleToolStart` | Tool name (or `"tool"`) | `"tool"` |
 
 Each span closes when the corresponding `End` or `Error` callback fires.
@@ -1061,6 +1087,7 @@ interface TraceData {
   cost: number | null
   error: string | null
   tags: string[]
+  tag_map?: Record<string, string>  // structured key→value tags (server-indexed)
   metadata: Record<string, unknown>
   spans: SpanData[]
   started_at: string               // ISO 8601 (SDK-side field name)
