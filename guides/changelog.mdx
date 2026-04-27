@@ -5,6 +5,30 @@ description: Recent API and SDK changes.
 
 ## 2026-04-27
 
+### Added: `POST /v1/webhooks/:id/test` — send a test ping to your webhook endpoint
+
+A new endpoint lets you fire a synthetic ping event to a registered webhook and inspect the destination's HTTP response, without waiting for a real event to fire. The delivery is signed with HMAC-SHA256 (same as live deliveries) and is ephemeral — it does not appear in the delivery log.
+
+Requires **Pro plan or above** and **Member or Owner** role.
+
+See [Webhooks guide](/guides/webhooks) and the [API reference](/api-reference/introduction) for full details.
+
+### Added: URL validation on `POST /v1/webhooks` (Create)
+
+Webhook URLs are now validated at creation time. The endpoint returns `422` with a machine-readable error key in the `error` field if any check fails:
+
+| Error key | Meaning |
+| --------- | ------- |
+| `webhook.url.not_https` | URL scheme must be `https` |
+| `webhook.url.private_ip` | URL resolves to a private, loopback, or link-local IP (SSRF protection) |
+| `webhook.url.unresolvable` | URL hostname could not be resolved via DNS |
+
+Existing webhooks are unaffected. See the [Webhooks guide](/guides/webhooks#url-requirements) for details.
+
+---
+
+## 2026-04-27
+
 ### SDK constructor parameter renamed: `project` → `projectName` (TypeScript) / `project_name` (Python)
 
 The `project` constructor parameter was never a valid field on `TruLayerConfig` (TypeScript) or `TruLayerClient` (Python). The correct parameter names are:
