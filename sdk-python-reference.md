@@ -492,6 +492,30 @@ Append a tag string to the trace's `tags` list.
 
 ---
 
+### `set_tag`
+
+```python
+trace.set_tag(key: str, value: str) -> None
+```
+
+Attach a structured key → value tag to the trace. Unlike `add_tag`, structured tags are indexed server-side and filterable via the `tag_key` / `tag_value` query parameters on list endpoints.
+
+**Parameters**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `key` | `str` | Tag key. Max 64 characters. Max 20 keys per trace |
+| `value` | `str` | Tag value. Max 64 characters |
+
+**Example**
+
+```python
+trace.set_tag("environment", "production")
+trace.set_tag("region", "us-west-2")
+```
+
+---
+
 ## SpanContext
 
 Returned by `trace.span()`. Works as both a sync and async context manager. Latency is measured automatically. If an exception propagates out of the block, `error=True` and `error_message` (formatted traceback) are set on the span.
@@ -577,6 +601,7 @@ from trulayer import TraceData
 | `cost` | `float \| None` | `None` | Cost in USD |
 | `error` | `str \| None` | `None` | Exception traceback string, or `None` if the trace succeeded |
 | `tags` | `list[str]` | `[]` | Tag list |
+| `tag_map` | `dict[str, str] \| None` | `None` | Structured key→value tags (server-indexed, filterable via `tag_key`/`tag_value` query params) |
 | `metadata` | `dict[str, Any]` | `{}` | Arbitrary metadata |
 | `spans` | `list[SpanData]` | `[]` | Child spans |
 | `started_at` | `datetime` | now (UTC) | Wall-clock start time |

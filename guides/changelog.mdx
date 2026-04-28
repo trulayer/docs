@@ -25,10 +25,6 @@ Webhook URLs are now validated at creation time. The endpoint returns `422` with
 
 Existing webhooks are unaffected. See the [Webhooks guide](/guides/webhooks#url-requirements) for details.
 
----
-
-## 2026-04-27
-
 ### SDK constructor parameter renamed: `project` → `projectName` (TypeScript) / `project_name` (Python)
 
 The `project` constructor parameter was never a valid field on `TruLayerConfig` (TypeScript) or `TruLayerClient` (Python). The correct parameter names are:
