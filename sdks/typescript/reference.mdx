@@ -92,6 +92,7 @@ await trace.span(
 | `setMetadata(obj)` | Metadata |
 | `setModel(name)` | Model name (for `llm` spans) |
 | `setTokens({ promptTokens, completionTokens })` | Token counts |
+| `setCost(usd)` | Cost of this span in USD (number), chainable |
 | `setError(err)` | Mark errored |
 | `id` (getter) | Span UUID |
 

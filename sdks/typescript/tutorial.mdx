@@ -58,6 +58,9 @@ await tl.trace("answer_question", async (trace) => {
       promptTokens: response.usage!.prompt_tokens,
       completionTokens: response.usage!.completion_tokens,
     });
+    span.setCost(
+      (response.usage!.prompt_tokens * 0.15 + response.usage!.completion_tokens * 0.60) / 1_000_000
+    );
     return response.choices[0].message.content;
   });
 

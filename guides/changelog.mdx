@@ -5,6 +5,29 @@ description: Recent API and SDK changes.
 
 ## 2026-04-29 (upcoming)
 
+### Added: `set_cost` / `setCost` on `SpanContext` in both SDKs
+
+Each span can now record its own cost in USD directly on the `SpanContext`, rather than relying on trace-level cost attribution. This is useful for multi-span traces where each LLM call has a distinct cost.
+
+**Python:**
+```python
+with trace.span("generate", span_type="llm") as span:
+    span.set_tokens(prompt_tokens, completion_tokens)
+    span.set_cost(0.0024)  # cost in USD
+```
+
+**TypeScript:**
+```typescript
+await trace.span("generate", "llm", async (span) => {
+  span.setTokens({ promptTokens, completionTokens });
+  span.setCost(0.0024);  // cost in USD, chainable
+});
+```
+
+See [Python SDK reference — SpanContext](/sdks/python/reference#spancontext) and [TypeScript SDK reference — SpanContext](/sdks/typescript/reference#spancontext).
+
+
+
 ### Added: Archiving the last active project is now blocked (HTTP 409)
 
 `POST /v1/projects/{id}/archive` returns `409` with `code: "error.project.cannot_archive_last"` if the project is the tenant's only active project. Every organization must have at least one active project at all times. Create or unarchive another project before archiving the one you want to retire.
