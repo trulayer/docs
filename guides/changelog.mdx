@@ -5,6 +5,18 @@ description: Recent API and SDK changes.
 
 ## 2026-04-29
 
+### Fixed: API reference synced — `Span` response schema updated to match backend wire format
+
+The `Span` response schema in the API reference has been updated to match the backend's actual wire format. Changes:
+
+- `required` array corrected to `[id, created_at, tenant_id, trace_id, name, type]` (removed phantom `span_type`, `error`, `started_at`)
+- Deprecated shim fields removed: `span_type`, `error_message`, `started_at`, `ended_at`
+- `error` field type corrected from `boolean` to `string | null`
+- New fields added: `created_at`, `tenant_id`, `parent_span_id`, `model`, `latency_ms`, `cost`, `otel_trace_id`, `otel_span_id`
+- Timestamp fields are now `start_time` / `end_time` (matching wire keys)
+
+These are documentation corrections — no wire format change. Existing integrations are unaffected.
+
 ### Fixed: `SpanType` docs corrected — `"chain"` and `"default"` removed, `"other"` is the correct fallback
 
 Several code examples and the `SpanType` reference table in the TypeScript SDK docs incorrectly listed `"chain"` and `"default"` as valid span type values. The valid enum is `"llm" | "tool" | "retrieval" | "other"` — this has always been the case on the wire and in both SDK implementations. The following files have been corrected:
@@ -53,7 +65,7 @@ The old `projectId` (TypeScript) / `project_id` (Python) aliases remain accepted
 
 ---
 
-## April 26, 2026
+## 2026-04-26
 
 ### @trulayer/mcp — MCP server for AI-native tooling
 

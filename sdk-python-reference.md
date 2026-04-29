@@ -222,7 +222,7 @@ trulayer.instrument_pydanticai(
 ) -> Any
 ```
 
-Wrap a PydanticAI `Agent` in place. Every `.run()`, `.run_sync()`, and `.run_stream()` call is recorded as a span with `span_type="agent"`. Each tool in `agent._function_tools` is also wrapped as a `span_type="tool"` child span.
+Wrap a PydanticAI `Agent` in place. Every `.run()`, `.run_sync()`, and `.run_stream()` call is recorded as a span with `span_type="other"`. Each tool in `agent._function_tools` is also wrapped as a `span_type="tool"` child span.
 
 **Parameters**
 
@@ -405,7 +405,7 @@ Flush all buffered events and stop the background sender. Called automatically b
 
 ## TraceContext
 
-Returned by `client.trace()`. Works as both a sync context manager (`with`) and an async context manager (`async with`). Latency is measured from `__enter__` to `__exit__`. If an exception propagates out of the block, `error=True` is set on the trace.
+Returned by `client.trace()`. Works as both a sync context manager (`with`) and an async context manager (`async with`). Latency is measured from `__enter__` to `__exit__`. If an exception propagates out of the block, `error` is set to the exception traceback string on the trace.
 
 The trace payload is enqueued to the batch sender in `__exit__`. Sampling is applied at entry: if `sample_rate < 1.0`, some traces are silently dropped.
 
@@ -518,7 +518,7 @@ trace.set_tag("region", "us-west-2")
 
 ## SpanContext
 
-Returned by `trace.span()`. Works as both a sync and async context manager. Latency is measured automatically. If an exception propagates out of the block, `error=True` and `error_message` (formatted traceback) are set on the span.
+Returned by `trace.span()`. Works as both a sync and async context manager. Latency is measured automatically. If an exception propagates out of the block, `error` is set to the formatted traceback string on the span.
 
 ---
 
