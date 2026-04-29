@@ -67,12 +67,23 @@ The `error` field is a human-readable string. Machine-parseable error codes (whe
 | `400` | Malformed request — body doesn't match schema |
 | `401` | Missing or invalid token |
 | `402` | Plan upgrade required — feature is not available on the tenant's current plan. Body includes `code: "plan_upgrade_required"` and `required_plan` (the lowest plan that unlocks the feature). |
-| `403` | Token valid but not authorised for this resource (e.g. wrong tenant) |
+| `403` | Token valid but not authorised for this resource (e.g. wrong tenant, or archived project — see below) |
 | `404` | Resource not found |
-| `409` | Conflict — e.g. submitting a trace with an ID that already exists |
+| `409` | Conflict — e.g. submitting a trace with an ID that already exists, or a constraint violation |
 | `422` | Validation error on a required field |
 | `429` | Rate-limited |
 | `5xx` | Server-side issue — safe to retry with exponential backoff |
+
+### Machine-readable error codes
+
+Some errors include a `code` field alongside the human-readable `error` string. Use the `code` value for programmatic handling — the `error` string is subject to change without notice.
+
+| Code | Status | Endpoints | Description |
+| ---- | ------ | --------- | ----------- |
+| `error.project.archived` | `403` | `POST /v1/ingest`, `POST /v1/ingest/batch`, `POST /v1/otlp/traces` | The project associated with the API key has been archived. Ingest is suspended for the duration. Unarchive the project from **Projects settings** to resume. |
+| `error.project.cannot_archive_last` | `409` | `POST /v1/projects/{id}/archive` | Returned when attempting to archive the tenant's last active project. At least one active project must exist at all times. |
+| `plan_upgrade_required` | `402` | Various | Feature not available on the current plan. Response also includes `required_plan`. |
+| `eval_quota_exceeded` | `402` | `POST /v1/eval` | Monthly eval quota exhausted. |
 
 Always log the `request_id` — it's the fastest way for support to look up a failed request.
 
