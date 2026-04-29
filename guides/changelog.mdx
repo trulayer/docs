@@ -21,8 +21,8 @@ These are documentation corrections — no wire format change. Existing integrat
 
 Several code examples and the `SpanType` reference table in the TypeScript SDK docs incorrectly listed `"chain"` and `"default"` as valid span type values. The valid enum is `"llm" | "tool" | "retrieval" | "other"` — this has always been the case on the wire and in both SDK implementations. The following files have been corrected:
 
-- `/sdk-typescript-reference` — example code and the `TruLayerCallbackHandler` span-type table
-- `/sdks/typescript/tutorial` and `/sdk-typescript-tutorial` — the span-type reference table and all example code blocks
+- `/sdks/typescript/reference` — example code and the `TruLayerCallbackHandler` span-type table
+- `/sdks/typescript/tutorial` — the span-type reference table and all example code blocks
 
 No action required for existing integrations. If your code passed `"chain"` or `"default"` as a span type, the server accepts unknown string values and stores them as-is; switch to `"other"` for correct dashboard grouping.
 
