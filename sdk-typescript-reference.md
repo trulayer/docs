@@ -204,7 +204,7 @@ Open a trace, run the callback, and enqueue the trace for upload when the callba
 
 **Returns** `Promise<T>` — resolves with the callback's return value.
 
-**Throws** Re-throws any error that propagates from the callback. The trace is marked `error: true` before rethrowing.
+**Throws** Re-throws any error that propagates from the callback. The trace's `error` field is set to the error message string before rethrowing.
 
 When `sampleRate < 1.0` and the trace is sampled out, the callback still executes but receives a `NoopTraceContext` — no data is sent.
 
@@ -349,7 +349,7 @@ Open a child span, run the callback, and record the span when it resolves.
 
 **Returns** `Promise<T>` — the callback's return value.
 
-**Throws** Re-throws any error from the callback. `span.data.error` and `span.data.error_message` are set before rethrowing.
+**Throws** Re-throws any error from the callback. `span.data.error` is set to the error message string before rethrowing.
 
 Span nesting is tracked automatically via `AsyncLocalStorage` on Node.js, Bun, and runtimes that expose `globalThis.AsyncLocalStorage`. On Edge runtimes without `AsyncLocalStorage`, parent span IDs are omitted.
 
