@@ -3195,85 +3195,45 @@ components:
 
     Span:
       type: object
-      required: [id, trace_id, name, span_type, error, started_at]
+      # Wire shape comes directly from model.Span embedded in the query
+      # handler's spanResponse — every field below corresponds 1:1 to a
+      # `json:"..."` tag on model.Span (or HypertableBase). Non-pointer
+      # scalar fields are in `required`; pointer / omitempty fields are
+      # not.
+      required: [id, created_at, tenant_id, trace_id, name, type]
       properties:
         id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        tenant_id: { type: string, format: uuid }
         trace_id: { type: string, format: uuid }
+        parent_span_id: { type: string, format: uuid, nullable: true }
         name: { type: string }
-        span_type:
-          description: |
-            Deprecated. The query handler never populated this field on the
-            wire under this JSON key — callers received `undefined`. Kept
-            in the spec (still marked required) to preserve the oasdiff
-            additive contract. Read the new `type` field instead, which
-            matches the JSON key actually produced by the query handler
-            and the SDK ingestion convention. Scheduled for removal in v2.
-          type: string
-          enum: [llm, tool, retrieval, other, default]
-          deprecated: true
         type:
           description: |
-            Span type. Matches the `type` field sent by the SDK on
-            ingestion and the JSON key actually produced by the query
-            handler. New in this revision; prefer over the deprecated
-            `span_type` alias.
+            Span type. Matches the `type` JSON key produced by the query
+            handler (model.Span.Type) and the SDK ingestion convention.
           type: string
           enum: [llm, tool, retrieval, other, default]
         input: { type: string, nullable: true }
         output: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        latency_ms: { type: integer, nullable: true }
+        cost: { type: number, nullable: true }
         error:
           description: |
-            Deprecated boolean flag. This declaration is spec drift that
-            predates TRU-18 — the JSON key `error` on the wire has always
-            been a nullable string (see `model.Span` in the backend). The
-            declaration is preserved unchanged to keep the oasdiff
-            breaking-change gate green; correcting its type is a v2
-            concern. Clients parsing JSON should tolerate a string or
-            null in this position; the boolean-typed code path never
-            executes.
-          type: boolean
-          deprecated: true
-        error_message: { type: string, nullable: true, deprecated: true }
-        latency_ms: { type: integer, nullable: true }
-        model: { type: string, nullable: true }
+            Nullable error message string. Null when the span succeeded.
+            Matches the `error` JSON key on model.Span (*string with
+            omitempty); previously declared `boolean`, which was spec
+            drift from before TRU-18.
+          type: string
+          nullable: true
         prompt_tokens: { type: integer, nullable: true }
         completion_tokens: { type: integer, nullable: true }
         metadata: { type: object, additionalProperties: true }
-        started_at:
-          description: |
-            Deprecated. The query handler never populated this JSON key on
-            the wire — callers received `undefined`. Kept in the spec
-            (still required) to preserve the oasdiff additive contract.
-            Read the new `start_time` field instead. Scheduled for
-            removal in v2.
-          type: string
-          format: date-time
-          deprecated: true
-        start_time:
-          description: |
-            Span start timestamp. Matches the JSON key actually produced
-            by the query handler. New in this revision; prefer over the
-            deprecated `started_at` alias.
-          type: string
-          format: date-time
-          nullable: true
-        ended_at:
-          description: |
-            Deprecated. Kept in the spec to preserve the oasdiff additive
-            contract. Read the new `end_time` field instead. Scheduled
-            for removal in v2.
-          type: string
-          format: date-time
-          nullable: true
-          deprecated: true
-        end_time:
-          description: |
-            Span end timestamp (null for unfinished spans). Matches the
-            JSON key actually produced by the query handler. New in this
-            revision; prefer over the deprecated `ended_at` alias.
-          type: string
-          format: date-time
-          nullable: true
+        start_time: { type: string, format: date-time, nullable: true }
+        end_time: { type: string, format: date-time, nullable: true }
+        otel_trace_id: { type: string, nullable: true }
+        otel_span_id: { type: string, nullable: true }
 
     Trace:
       type: object
