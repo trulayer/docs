@@ -3,6 +3,24 @@ title: Changelog
 description: Recent API and SDK changes.
 ---
 
+## 2026-04-29 (upcoming)
+
+### Added: Archiving the last active project is now blocked (HTTP 409)
+
+`POST /v1/projects/{id}/archive` returns `409` with `code: "error.project.cannot_archive_last"` if the project is the tenant's only active project. Every organization must have at least one active project at all times. Create or unarchive another project before archiving the one you want to retire.
+
+See [Project lifecycle](/guides/projects#the-one-active-project-constraint) and the [API reference error codes](/api-reference/introduction#machine-readable-error-codes).
+
+### Added: Ingest returns HTTP 403 when the API key's project is archived
+
+`POST /v1/ingest`, `POST /v1/ingest/batch`, and `POST /v1/otlp/traces` now return `403` with `code: "error.project.archived"` if the API key's associated project has been archived. The Python and TypeScript SDKs both handle this response by permanently disabling the exporter and logging an ERROR-level message — your application continues running normally.
+
+To resume: unarchive the project from **Projects settings**, then restart the process or create a new client instance (no key rotation needed).
+
+See [Project lifecycle](/guides/projects#what-archiving-does), [TypeScript SDK — archived project](/sdks/typescript/fail-mode#archived-project), [Python SDK — archived project](/sdks/python/fail-mode#archived-project).
+
+---
+
 ## 2026-04-29
 
 ### Fixed: API reference synced — `Span` response schema updated to match backend wire format

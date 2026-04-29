@@ -100,7 +100,54 @@ TRULAYER_REPLAY_FILE=fixtures/golden.jsonl \
 | CI integration tests against a golden capture | `TRULAYER_MODE=replay` + `TRULAYER_REPLAY_FILE` |
 | Local development without an API key | `TRULAYER_MODE=local` |
 
+## Archived project {#archived-project}
+
+HTTP `403` responses with `code: "error.project.archived"` are treated differently from other errors. They indicate that the project associated with your API key has been archived — a deliberate configuration change, not a transient failure.
+
+When the SDK receives this response:
+
+1. It logs an ERROR-level message via `console.error`:
+   ```
+   [TruLayer] ERROR: Ingest permanently disabled — the project associated with this API key has been archived.
+   Unarchive the project at https://app.trulayer.ai/projects to resume, then restart the process or create a new client.
+   ```
+2. The exporter is **permanently disabled** for that client instance. Subsequent flush attempts are no-ops and produce no further log output.
+3. Your application continues running normally — only TruLayer observability is suspended.
+
+### Why the exporter does not retry
+
+A `403` is an authoritative refusal. Retrying would produce noise without any possibility of success. The SDK treats this the same way a browser treats an HTTP 403: stop, log, and do not retry.
+
+### Resuming after unarchiving
+
+Unarchiving the project (from **Projects settings** at [app.trulayer.ai/projects](https://app.trulayer.ai/projects)) restores ingest immediately — no key rotation needed.
+
+However, any already-running client instance that received the 403 will not automatically resume. You must either:
+
+- **Restart the process** — the new process starts a fresh client that will send normally.
+- **Create a new client** — call `new TruLayer(...)` again with the same API key. The new client is independent of the disabled one.
+
+### Detecting the error programmatically
+
+In block mode (`TRULAYER_FAIL_MODE=block`), the `TruLayerFlushError` thrown on permanent 403s carries a `statusCode` property you can inspect:
+
+```typescript
+import { TruLayerFlushError } from "@trulayer/sdk";
+
+try {
+  await tl.shutdown();
+} catch (err) {
+  if (err instanceof TruLayerFlushError && err.statusCode === 403) {
+    console.error("Project may be archived — check app.trulayer.ai/projects");
+  }
+  throw err;
+}
+```
+
+See [Project lifecycle](/guides/projects) for full details on archiving, unarchiving, and the one-active-project constraint.
+
 ## See also
 
 - [Testing helpers](./testing) — in-memory assertions against captured traces.
 - [TypeScript SDK reference](./reference) — full type signatures for `TruLayerFlushError` and the error hierarchy.
+- [Project lifecycle](/guides/projects) — archiving, unarchiving, and the effect on active API keys.

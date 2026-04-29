@@ -1,0 +1,92 @@
+---
+title: "Project lifecycle"
+description: "How to archive and unarchive projects, what archiving does to active API keys, and the one-active-project constraint."
+---
+
+A **project** is the unit of isolation inside a TruLayer organization — traces, evals, API keys, and dashboard views are all scoped to a single project. This guide covers the full lifecycle: creating, archiving, and unarchiving projects, and explains exactly what happens to running integrations when a project's state changes.
+
+## Archiving vs deletion
+
+| | Archiving | Deletion |
+|---|---|---|
+| **Reversible?** | Yes — unarchive at any time | No — deletion is permanent |
+| **Data retained?** | Yes — all traces, evals, and metrics are preserved | N/A |
+| **API keys affected?** | Yes — ingest is suspended (see below) | N/A |
+| **Available via API?** | Yes — `POST /v1/projects/{id}/archive` | Not available via API |
+
+Archiving is the recommended way to retire a project that is no longer actively ingesting data. All historical data remains accessible via direct URL and API queries. Deletion is not available through the API; contact support if you need to remove a project and all its data permanently.
+
+## The one-active-project constraint
+
+Every organization must have at least one active project at all times. Attempting to archive your last active project returns:
+
+```http
+HTTP/1.1 409 Conflict
+
+{
+  "code": "error.project.cannot_archive_last",
+  "error": "Cannot archive the last active project. Create a new project or unarchive an existing one first."
+}
+```
+
+To work around this, create a new project (or unarchive an existing one) before archiving the one you want to retire.
+
+## What archiving does
+
+When you archive a project, the following changes take effect immediately:
+
+- **Dashboard sidebar** — the project is hidden from the project selector. It no longer appears in the active list, though it is still visible on the Projects settings page under "Archived".
+- **Ingest suspended** — any API key whose project has been archived will receive `HTTP 403` with `code: "error.project.archived"` on ingest endpoints (`POST /v1/ingest`, `POST /v1/ingest/batch`, `POST /v1/otlp/traces`). The SDK catches this response, permanently disables the exporter for that client instance, and logs an ERROR-level message. No data is lost in transit — the SDK handles the shutdown cleanly.
+- **Existing data retained** — all traces, evals, metrics, and feedback are preserved. Historical dashboards remain accessible.
+- **No key rotation needed** — the API keys themselves are not invalidated. They resume working as soon as the project is unarchived.
+
+### Error response on ingest
+
+```http
+HTTP/1.1 403 Forbidden
+
+{
+  "code": "error.project.archived",
+  "message": "The project associated with this API key has been archived. Unarchive the project to resume ingestion."
+}
+```
+
+## What unarchiving does
+
+Unarchiving a project restores it to active status:
+
+- Ingest resumes immediately — API keys associated with the project start accepting data again.
+- The project reappears in the dashboard sidebar.
+- No key rotation or SDK reconfiguration is needed, **with one exception**: if an SDK client instance was already running when the project was archived, it has permanently disabled its exporter (see [SDK behavior](#sdk-behavior-on-project-archived) below). You must restart the process or instantiate a new client to resume sending from that process.
+
+## SDK behavior on project archived
+
+Both the Python and TypeScript SDKs handle the `error.project.archived` 403 specially:
+
+1. The SDK logs an ERROR-level message that includes the resolution steps.
+2. The exporter is **permanently disabled** for that client instance — subsequent flushes are no-ops and do not produce further log output.
+3. The application process continues running normally; only observability is affected.
+
+This is intentional: retrying a 403 (an authoritative refusal) would produce noise and waste resources. The 403 is not transient — it reflects a deliberate configuration decision.
+
+**To resume sending after unarchiving:**
+- Restart the process, or
+- Instantiate a new client (`new TruLayer(...)` / `trulayer.init(...)`) with the same API key. The new client will start sending normally.
+
+See [TypeScript SDK — failure behavior](/sdks/typescript/fail-mode#archived-project) and [Python SDK — failure behavior](/sdks/python/fail-mode#archived-project) for SDK-specific details.
+
+## How to archive a project
+
+1. Go to [app.trulayer.ai/projects](https://app.trulayer.ai/projects).
+2. Find the project row and click **Archive**.
+3. Confirm the dialog. The project moves to the archived section immediately.
+
+Archiving requires **Owner** role. Members and viewers cannot archive projects.
+
+## How to unarchive a project
+
+1. Go to [app.trulayer.ai/projects](https://app.trulayer.ai/projects).
+2. Scroll to the **Archived** section.
+3. Click **Unarchive** on the project row.
+
+Unarchiving also requires **Owner** role.

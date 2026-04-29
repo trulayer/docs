@@ -106,6 +106,7 @@
           {
             "group": "Guides",
             "pages": [
+              "guides/projects",
               "guides/webhooks",
               "guides/semantic-search",
               "guides/model-routing",
