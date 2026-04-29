@@ -139,7 +139,7 @@ await tl.trace('my-trace', async (t) => {
 | `t.setMetadata(obj)` | Merge key-value pairs into trace metadata |
 | `t.addTag(tag)` | Append a tag |
 
-If an exception propagates out of the trace callback, `error: true` is set on the trace automatically and the error is re-thrown.
+If an exception propagates out of the trace callback, `error` is set to the error message string on the trace automatically and the error is re-thrown.
 
 ---
 
@@ -187,10 +187,9 @@ The `spanType` parameter (second argument to `span()`) controls how the span app
 | `"llm"` | LLM completion calls |
 | `"retrieval"` | Vector store / document retrieval |
 | `"tool"` | Function / tool calls in an agent |
-| `"chain"` | Multi-step pipelines |
-| `"default"` | Everything else |
+| `"other"` | Everything else |
 
-Latency is measured automatically. If an exception propagates out of a span's callback, `error: true` and `error_message` are set automatically on the span.
+Latency is measured automatically. If an exception propagates out of a span's callback, `error` (a string) and `error_message` are set automatically on the span.
 
 ### Nested spans
 
@@ -198,7 +197,7 @@ Spans can be nested by calling `span()` on a `SpanContext`:
 
 ```typescript
 await tl.trace('pipeline', async (t) => {
-  await t.span('outer', 'chain', async (outer) => {
+  await t.span('outer', 'other', async (outer) => {
     await outer.span('inner', 'llm', async (inner) => {
       inner.setInput('nested call')
       // inner.parent_span_id === outer.data.id
@@ -658,7 +657,7 @@ async function answerQuestion(question: string): Promise<string> {
       t.setInput(question)
 
       // Stage 1: embed the query
-      const queryVec = await t.span('embed-query', 'default', async (s) => {
+      const queryVec = await t.span('embed-query', 'other', async (s) => {
         s.setModel('text-embedding-3-small')
         s.setInput(question)
         const vec = await embed(question)

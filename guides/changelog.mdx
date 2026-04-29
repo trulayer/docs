@@ -3,6 +3,23 @@ title: Changelog
 description: Recent API and SDK changes.
 ---
 
+## 2026-04-29
+
+### Fixed: `SpanType` docs corrected — `"chain"` and `"default"` removed, `"other"` is the correct fallback
+
+Several code examples and the `SpanType` reference table in the TypeScript SDK docs incorrectly listed `"chain"` and `"default"` as valid span type values. The valid enum is `"llm" | "tool" | "retrieval" | "other"` — this has always been the case on the wire and in both SDK implementations. The following files have been corrected:
+
+- `/sdk-typescript-reference` — example code and the `TruLayerCallbackHandler` span-type table
+- `/sdks/typescript/tutorial` and `/sdk-typescript-tutorial` — the span-type reference table and all example code blocks
+
+No action required for existing integrations. If your code passed `"chain"` or `"default"` as a span type, the server accepts unknown string values and stores them as-is; switch to `"other"` for correct dashboard grouping.
+
+### Fixed: `error` field on `Trace` and `Span` clarified as `string | null`
+
+Prose in the TypeScript SDK reference and tutorial incorrectly described the `error` field as a boolean (`error: true`). The field has always been `string | null` — it carries the error message string when an error occurred, or `null` on success. This matches the Python SDK documentation and both SDK implementations. No wire format change.
+
+---
+
 ## 2026-04-27
 
 ### Added: `POST /v1/webhooks/:id/test` — send a test ping to your webhook endpoint
