@@ -167,6 +167,7 @@ Returned by `TraceContext.span()`. Key methods:
 | `set_metadata(**kwargs)` | Key-value metadata |
 | `set_model(model)` | Model name (for `llm` spans) |
 | `set_tokens(prompt_tokens, completion_tokens)` | Token counts |
+| `set_cost(usd)` | Cost of this span in USD (float) |
 | `set_error(exc)` | Mark errored |
 | `.id` | Span UUID (read-only) |
 
