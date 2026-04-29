@@ -79,7 +79,8 @@
                   "dashboard/settings-usage",
                   "dashboard/settings-billing",
                   "dashboard/settings-team",
-                  "dashboard/settings-audit-log"
+                  "dashboard/settings-audit-log",
+                  "dashboard/settings-appearance"
                 ]
               }
             ]
