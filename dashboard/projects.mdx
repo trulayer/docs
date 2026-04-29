@@ -1,0 +1,41 @@
+---
+title: "Projects"
+description: "Create, list, and archive projects from the dashboard."
+---
+
+A **project** is the unit of isolation inside a TruLayer organization. Traces, evals, API keys, and dashboards are all scoped to a single project, so most teams create one project per environment (`production`, `staging`) or per app.
+
+The Projects page at [app.trulayer.ai/projects](https://app.trulayer.ai/projects) is the canonical place to manage projects for the active organization.
+
+## What you'll see
+
+- One row per project — active projects first, archived projects below.
+- The project name links to the project's [Ingestion health](/dashboard/ingestion-health) page.
+- A status badge (`Active` or `Archived`) and the creation timestamp in your local timezone.
+
+## Creating a project
+
+1. Click **New project** in the top-right of the page.
+2. Enter a short, descriptive name (for example `customer-support-bot`).
+3. Press **Create**.
+
+The new project becomes the active project automatically — the sidebar project selector switches to it, and any new traces or API keys created from that point forward attach to it.
+
+The **New project** button is visible to **owners** and **members**. Viewers can browse the list but cannot create projects.
+
+## Archiving and unarchiving
+
+Archive a project to hide it from the dashboard without deleting any data. Click **Archive** on the row to move it to the archived section; ingestion-health pages and historical traces remain reachable by direct URL.
+
+To restore an archived project, scroll to its row and click **Unarchive**. It re-appears in the sidebar selector and in the active count.
+
+Archive and unarchive are **owner-only** actions. Members and viewers see the buttons hidden.
+
+## Active project and the sidebar
+
+The sidebar selector picks the project that the rest of the dashboard scopes to. Switching projects:
+
+- Reloads traces, metrics, evals, and failures with the new project's data.
+- Does **not** affect the projects list — every project in the org is shown here regardless of which one is active.
+
+If the project you archive happens to be the active one, the dashboard falls back to the next available active project automatically.

@@ -65,6 +65,7 @@
             "group": "Dashboard",
             "pages": [
               "dashboard/overview",
+              "dashboard/projects",
               "dashboard/traces",
               "dashboard/ingestion-health",
               "dashboard/evals",
