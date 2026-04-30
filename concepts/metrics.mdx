@@ -54,6 +54,48 @@ The **Metrics** page shows these metrics as time-series charts. You can:
 - Overlay multiple metrics on the same axis
 - Drill from any point into the underlying traces
 
+## Project-scoped metrics
+
+`GET /v1/projects/{id}/metrics` returns a single scalar metric scoped to one project over a fixed window. This endpoint complements the trace-level `/v1/metrics` endpoint — it answers questions about control-loop behaviour at the project level rather than about individual trace latency or cost.
+
+### Supported metrics
+
+| Metric | Description |
+| ------ | ----------- |
+| `retry_cap_hit` | Number of traces in the window where a policy hit its `max_retry_depth` cap and auto-escalated to the HITL pending-approval queue. |
+
+### Parameters
+
+| Parameter | Required | Description |
+| --------- | -------- | ----------- |
+| `metric` | Yes | Metric name. Currently only `retry_cap_hit` is valid. |
+| `window` | Yes | Aggregation window. One of `7d` or `30d`. |
+
+### Response shape
+
+```json
+{
+  "metric": "retry_cap_hit",
+  "value": 12,
+  "window": "30d"
+}
+```
+
+`value` is always an integer count. The endpoint returns `0` (not `null`) when no traces match in the window.
+
+### Auth
+
+Requires a Clerk session (viewer role or above) or an API key with the `query` scope.
+
+### Example
+
+```bash
+curl "https://api.trulayer.ai/v1/projects/proj_01j.../metrics?metric=retry_cap_hit&window=30d" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+Use `retry_cap_hit` alongside your policy's `max_retry_depth` setting to tune the escalation threshold: if the count is high, consider raising the depth cap or adjusting the trigger condition to reduce spurious retries.
+
 ## Cost calculation
 
 TruLayer maintains a per-model price table for major providers (OpenAI, Anthropic, Google, Cohere). Cost is computed at ingest time and stored on the trace so historical reports are stable even when upstream prices change.
