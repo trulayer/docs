@@ -5,6 +5,16 @@ description: Recent API and SDK changes.
 
 ## 2026-04-30
 
+### Added: `max_retry_depth` on policies, `control_loop_depth` on trace detail, and `GET /v1/projects/{id}/metrics`
+
+Three new API surfaces shipped in TRU-362:
+
+- **`max_retry_depth`** (integer, 1–10, default 3) on `POST /v1/policies` and `PATCH /v1/policies/:id`. When a `retry`-action policy has executed this many retries on a single trace, the next retry is automatically converted to an `escalate` action and routed to the HITL pending-approval queue. Protects against unbounded retry loops. See [Control](/dashboard/control#policies) and the [API reference](/api-reference/introduction).
+- **`control_loop_depth`** (integer) on `GET /v1/traces/:id`. Counts how many retry control actions have executed on the trace across all policy executions. Escalation actions are excluded. Only present on the detail response, not the list. See [Traces](/dashboard/traces#header).
+- **`GET /v1/projects/{id}/metrics`** — new endpoint to query project-scoped scalar metrics. Currently supports `metric=retry_cap_hit` with a required `window` parameter (`7d` or `30d`). Returns `{ "metric": "retry_cap_hit", "value": 42, "window": "30d" }`. Requires viewer+ (Clerk session) or API key with `query` scope. See [Metrics](/concepts/metrics#project-scoped-metrics).
+
+---
+
 ### Added: `GET /v1/control/actions/{id}/diff` — remediation diff for retry actions
 
 `GET /v1/control/actions/{id}/diff` returns a `RemediationDiff` comparing the original and remediated span outputs after a control-loop retry action. The diff includes token length delta, latency delta, embedding similarity (cosine via Claude Haiku 4.5), and per-eval-rule score deltas. Returns 202 while evaluation is still running — poll until 200. Only `retry`-type actions produce a diff; `fallback_model` and `prompt_modification` return 422.

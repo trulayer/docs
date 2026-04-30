@@ -35,6 +35,7 @@ Fields:
   - `eval_score.toxicity > 0.7` → block
   - `span.error_type = "rate_limit"` → retry with backoff
 - **Action** — one of the four above, with action-specific parameters (retry count, fallback model id, block text, HITL queue).
+- **Max retry depth** — integer 1–10, default 3. Controls how many `retry` actions a policy will execute on a single trace before automatically converting the next retry into an `escalate` action and routing the trace to the HITL pending-approval queue. Once the depth cap is reached, no further retries occur for that policy on that trace — a human must approve or reject it instead. Raise the cap to allow more automatic retries; lower it to escalate sooner. This field only applies to policies whose action type is `retry`.
 - **Rollout %** — integer 0–100. Policy evaluates on 100% of matching traces but only fires the action on this fraction. Use for canaries.
 - **Mode** — `dry-run` (logs what it would have done, does nothing), `shadow` (fires alongside the original response, does not replace it), `enforce` (default — action replaces the response).
 
