@@ -3,6 +3,18 @@ title: Changelog
 description: Recent API and SDK changes.
 ---
 
+## 2026-04-30
+
+### Fixed: TypeScript tutorial — `scrubFn` renamed to `redact` in PII section
+
+Section 12 of the TypeScript SDK tutorial used `scrubFn` as the config key, which does not exist on `TruLayerConfig`. The correct key is `redact`. Updated the code example and section heading, and corrected the same incorrect name in the best-practices guide prose. Python uses `scrub_fn`; TypeScript uses `redact`. No SDK behaviour changed.
+
+### Fixed: Python SDK reference — `TraceData` missing fields
+
+The `TraceData` model listing in the Python SDK reference omitted five fields that exist in the actual Pydantic model: `external_id`, `tag_map`, `model`, `latency_ms`, and `cost`. Added all five with correct types. No wire format change.
+
+---
+
 ## 2026-04-29 (upcoming)
 
 ### Added: `set_cost` / `setCost` on `SpanContext` in both SDKs
