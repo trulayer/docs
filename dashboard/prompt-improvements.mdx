@@ -1,0 +1,55 @@
+---
+title: "Prompt Improvements"
+description: "Closed-loop prompt improvement: review model-proposed prompt diffs, ship them after an A/B replay passes, and roll back automatically when a shipped prompt regresses."
+---
+
+The **Prompt Improvements** page closes the loop on the failures TruLayer observes in production. The platform clusters production failures, asks an LLM to synthesize a candidate prompt diff, replays a held-out trace set against both the live prompt and the candidate, and proposes the diff for review.
+
+{/* screenshot: Prompt Improvements list with a proposed deployment (TODO) */}
+
+## State machine
+
+A **prompt deployment** moves through a fixed state machine. Every transition is recorded; you can see the current state on every row of the list.
+
+| State | What it means |
+| ----- | ------------- |
+| `proposed` | The cluster→diff worker synthesized a candidate prompt. Awaiting A/B replay. |
+| `ab_running` | The A/B harness is replaying the held-out trace set. |
+| `ab_passed` | A/B replay finished and the candidate is recommended for ship. |
+| `ab_failed` | A/B replay finished and the candidate did not improve the metric set. |
+| `shipped` | An owner approved the candidate and it is now live for the project. |
+| `monitoring` | The shipped prompt is being observed against the post-ship rolling window. |
+| `regressed` | The rolling window crossed the regression threshold. A regression banner appears across the dashboard. |
+| `rolled_back` | An owner (or the auto-rollback monitor) rolled the shipped prompt back to its predecessor. |
+| `rejected` | An owner rejected the candidate before it was shipped. |
+
+## Reviewing a candidate
+
+Click any row to open the detail page.
+
+{/* screenshot: Prompt deployment detail with diff and A/B report (TODO) */}
+
+The detail page shows:
+
+- **Candidate diff** — a unified-diff view of the proposed prompt against the currently shipped prompt. Added lines are highlighted green; removed lines red.
+- **A/B replay report** — per-metric baseline, candidate, and delta. A passing report (green badge) is the default precondition for shipping.
+- **Decision controls** — owner-only buttons to approve, reject, or roll back.
+- **Post-ship monitoring** — the rolling regression metric over time. A dashed reference line marks the A/B candidate baseline so divergence is visible at a glance.
+
+## Approving and rolling back
+
+Approve a candidate by clicking **Approve & ship**. The prompt becomes live immediately and enters the `monitoring` state. Until you approve, no production traffic is affected — the candidate is sandboxed in the A/B replay only.
+
+Reject a candidate or roll back a shipped prompt by clicking **Reject** or **Roll back**. Both require a free-text reason that is recorded on the deployment.
+
+Only users with the `owner` role can approve, reject, or roll back. See [Team settings](./settings-team) for roles.
+
+## Regression alerts
+
+When a shipped prompt's rolling regression metric crosses the configured threshold, the deployment moves to `regressed` and a banner appears across every dashboard page. Click the banner to jump to the regressed deployment and decide whether to roll back manually or let the auto-rollback monitor act.
+
+{/* screenshot: Regression banner in the dashboard chrome (TODO) */}
+
+## Plan availability
+
+Closed-loop prompt improvement is part of the **Control plane** feature set and is gated on the **Team** plan or above (same gate as Control, Policies, Alert Rules, and Model Routing). Starter and Pro projects see an upgrade CTA in place of the page.
