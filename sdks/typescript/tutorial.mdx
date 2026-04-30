@@ -224,13 +224,13 @@ await tl.submitFeedback({
 
 Return `trace.id` from your handler so the client can attach feedback to the right trace.
 
-## 12. PII scrubbing
+## 12. PII redaction
 
 ```typescript
 const tl = new TruLayer({
   apiKey: process.env.TRULAYER_API_KEY!,
   projectName: "prod",
-  scrubFn: (value) => {
+  redact: (value) => {
     if (typeof value === "string") {
       return value
         .replace(/\b[\w.+-]+@[\w.-]+\.\w{2,}\b/gi, "[email]")

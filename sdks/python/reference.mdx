@@ -180,11 +180,16 @@ class TraceData(BaseModel):
     id: UUID
     project_id: str
     session_id: str | None
-    name: str
+    external_id: str | None
+    name: str | None
     input: Any
     output: Any
+    model: str | None
+    latency_ms: int | None
+    cost: float | None
     error: str | None
     tags: list[str]
+    tag_map: dict[str, str] | None   # structured key→value tags; takes precedence over tags on the wire
     metadata: dict[str, Any]
     spans: list[SpanData]
     started_at: datetime

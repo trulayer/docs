@@ -29,11 +29,11 @@ If you use a model not in TruLayer's price table (self-hosted, custom provider),
 
 ## PII redaction
 
-**Configure `scrub_fn` / `scrubFn` at init time.** It's the last thing that runs before data leaves your process. Never "fix it later on the dashboard side" — by then, PII is already persisted.
+**Configure `scrub_fn` (Python) / `redact` (TypeScript) at init time.** It's the last thing that runs before data leaves your process. Never "fix it later on the dashboard side" — by then, PII is already persisted.
 
 **Test your scrubber.** Add a unit test that passes known-bad inputs through the scrubber and asserts redaction. This is the one test that matters for compliance audits.
 
-**Scrub metadata too.** The SDK applies `scrub_fn` to inputs and outputs. If you put email addresses in metadata, wrap them yourself.
+**Scrub metadata too.** The SDK applies `scrub_fn` / `redact` to inputs and outputs. If you put email addresses in metadata, wrap them yourself.
 
 <CodeGroup>
 ```python Python
