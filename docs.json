@@ -115,6 +115,7 @@
               "guides/ci-eval-gate",
               "guides/audit-verify",
               "guides/api-key-scopes",
+              "guides/remediation-diffs",
               "guides/changelog"
             ]
           },

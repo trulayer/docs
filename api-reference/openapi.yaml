@@ -1547,6 +1547,66 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /v1/control/actions/{id}/diff:
+    get:
+      operationId: getRemediationDiff
+      tags: [control]
+      summary: Get the per-trace remediation diff for a control action
+      description: |
+        Returns a comparison of the original LLM span against the
+        remediated span produced by a `retry` control action — token
+        length delta, latency delta, Claude-rated similarity, and
+        per-rule eval score deltas. Lazy-computed on first GET and
+        cached for subsequent requests. TRU-363.
+
+        Status codes:
+          * 200 — diff available (cached or just computed)
+          * 202 — `evaluation_incomplete`: caller should poll
+          * 404 — action not found / cross-tenant
+          * 422 — `no_remediated_span`: action type cannot produce a diff
+                  (currently `fallback_model` and `prompt_modification`)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Remediation diff
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemediationDiff"
+        "202":
+          description: Evaluation still running — caller should poll
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [pending]
+                  reason:
+                    type: string
+                    enum: [evaluation_incomplete]
+                required: [status, reason]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Action type cannot produce a remediation diff
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reason:
+                    type: string
+                    enum: [no_remediated_span]
+                required: [reason]
+
   /v1/control/actions/pending:
     get:
       operationId: listPendingControlActions
@@ -4403,6 +4463,69 @@ components:
         active:
           type: boolean
           description: True when the control-loop kill-switch is active for the tenant.
+
+    ScoreDelta:
+      type: object
+      required: [eval_rule_id, rule_name, original_score, remediated_score, delta]
+      properties:
+        eval_rule_id:
+          type: string
+          format: uuid
+        rule_name:
+          type: string
+        original_score:
+          type: number
+          format: double
+        remediated_score:
+          type: number
+          format: double
+        delta:
+          type: number
+          format: double
+
+    RemediationDiff:
+      type: object
+      description: |
+        Per-trace remediation diff for a `retry` control action. Lazy-
+        computed on first GET and cached. `embedding_similarity` is a
+        0..1 score from a Claude similarity rating, with the sentinel
+        `-1.0` when the rater call failed. TRU-363.
+      required:
+        - action_id
+        - original_span_id
+        - remediated_span_id
+        - token_length_delta
+        - latency_delta_ms
+        - embedding_similarity
+        - score_deltas
+        - summary
+      properties:
+        action_id:
+          type: string
+          format: uuid
+        original_span_id:
+          type: string
+          format: uuid
+        remediated_span_id:
+          type: string
+          format: uuid
+        token_length_delta:
+          type: integer
+          description: remediated_tokens - original_tokens (sum of prompt + completion).
+        latency_delta_ms:
+          type: integer
+          format: int64
+          description: remediated_latency_ms - original_latency_ms.
+        embedding_similarity:
+          type: number
+          format: double
+          description: 0..1 similarity, or -1.0 when the rater call failed.
+        score_deltas:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScoreDelta"
+        summary:
+          type: string
 
     # ── Model Routes ────────────────────────────────────────────────���─────────
 
