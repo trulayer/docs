@@ -73,6 +73,7 @@
               "dashboard/feedback",
               "dashboard/failures",
               "dashboard/control",
+              "dashboard/prompt-improvements",
               {
                 "group": "Settings",
                 "pages": [
