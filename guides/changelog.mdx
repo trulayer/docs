@@ -15,11 +15,29 @@ Three new API surfaces shipped in TRU-362:
 
 ---
 
-### Added: `GET /v1/control/actions/{id}/diff` — remediation diff for retry actions
+### Added: `GET /v1/control/actions/{id}/diff` — remediation diff for all action types
 
-`GET /v1/control/actions/{id}/diff` returns a `RemediationDiff` comparing the original and remediated span outputs after a control-loop retry action. The diff includes token length delta, latency delta, embedding similarity (cosine via Claude Haiku 4.5), and per-eval-rule score deltas. Returns 202 while evaluation is still running — poll until 200. Only `retry`-type actions produce a diff; `fallback_model` and `prompt_modification` return 422.
+`GET /v1/control/actions/{id}/diff` returns a `RemediationDiff` comparing the original and remediated span outputs after a control-loop action. All three action types (`retry`, `fallback_model`, `prompt_modification`) produce a remediated span and support this endpoint. The diff includes token length delta, latency delta, embedding similarity (cosine via Claude Haiku 4.5), and per-eval-rule score deltas. Returns 202 while evaluation is still running — poll until 200.
 
 Requires Team+ plan. See the [remediation diffs guide](/guides/remediation-diffs) and the [API reference](/api-reference/introduction) for the full `RemediationDiff` schema.
+
+---
+
+### Added: auto-escalation when `max_retry_depth` is exceeded
+
+When a `retry`-action policy has retried a single trace `max_retry_depth` times, the control loop automatically converts the next retry into an `escalate` action (`require_approval: true`) and routes the trace to the HITL queue. No further automatic retries occur on that trace. The action's `metadata` includes `escalation_reason: "retry_threshold_exceeded"` and `retry_count: <N>`.
+
+The **Retry cap hit** metric on the project overview counts distinct traces that triggered auto-escalation over the last 7 or 30 days. Clicking the metric opens a filtered trace list.
+
+See the [remediation diffs guide — auto-escalation section](/guides/remediation-diffs#auto-escalation-and-the-retry-depth-cap) and the [Metrics reference](/concepts/metrics#project-scoped-metrics).
+
+---
+
+### Updated: all three action types now publish remediated spans and produce diffs
+
+`fallback_model` and `prompt_modification` actions now re-publish their output as a remediated span on the originating trace, and eval rules re-fire on those spans. This means `GET /v1/control/actions/{id}/diff` now returns diffs for all three action types. Earlier documentation that said only `retry` produces a diff, or that `fallback_model`/`prompt_modification` return `422`, is superseded by this change.
+
+See the updated [remediation diffs guide](/guides/remediation-diffs#which-action-types-produce-a-diff).
 
 ---
 
