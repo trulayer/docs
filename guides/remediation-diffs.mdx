@@ -1,0 +1,140 @@
+---
+title: Remediation diffs
+description: Compare original and remediated span outputs after a control-loop retry action.
+---
+
+After the control loop retries a failing LLM call, you can retrieve a structured diff that shows exactly what changed between the original span and the remediated one. This guide explains how to fetch that diff, how to handle the lazy-computation pattern, and what each field means.
+
+## What is a remediation diff?
+
+When a `retry` control action runs, TruLayer reruns the LLM call under the same policy conditions. The diff endpoint (`GET /v1/control/actions/{id}/diff`) compares the two span outputs and returns:
+
+- **Token length delta** — how many tokens the remediated output added or removed
+- **Latency delta** — how many milliseconds faster or slower the remediated call was
+- **Embedding similarity** — cosine similarity between the original and remediated outputs, computed by Claude Haiku 4.5
+- **Score deltas** — for each eval rule that scored both spans, the before and after scores and the delta
+
+Use remediation diffs to audit whether a retry improved quality, to tune retry policies, or to surface regressions when a retry makes things worse.
+
+## Which action types produce a diff?
+
+Only `retry` actions produce a diff. If you call the endpoint for a `fallback_model` or `prompt_modification` action, the API returns `422`:
+
+```json
+{ "reason": "no_remediated_span" }
+```
+
+Check the `action_type` on the control action before calling the diff endpoint. Actions of type `retry` always have a `remediated_span_id` once the retry completes.
+
+## Fetching a diff
+
+```bash
+curl https://api.trulayer.ai/v1/control/actions/{id}/diff \
+  -H "Authorization: Bearer tl_..."
+```
+
+Replace `{id}` with the UUID of the control action. This endpoint is dashboard-accessible for all Team+ plan roles.
+
+## The 202 → poll-until-200 pattern
+
+Diff computation is lazy: the first GET triggers the computation, which runs asynchronously. If the underlying evaluation has not yet completed, the API returns `202`:
+
+```json
+{
+  "status": "pending",
+  "reason": "evaluation_incomplete"
+}
+```
+
+Poll until you receive `200`. A simple polling loop:
+
+```typescript
+async function waitForDiff(actionId: string, token: string) {
+  while (true) {
+    const res = await fetch(
+      `https://api.trulayer.ai/v1/control/actions/${actionId}/diff`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (res.status === 200) return await res.json();
+    if (res.status !== 202) throw new Error(`Unexpected status: ${res.status}`);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+}
+```
+
+```python
+import time
+import httpx
+
+def wait_for_diff(action_id: str, token: str) -> dict:
+    while True:
+        r = httpx.get(
+            f"https://api.trulayer.ai/v1/control/actions/{action_id}/diff",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        if r.status_code == 200:
+            return r.json()
+        if r.status_code != 202:
+            r.raise_for_status()
+        time.sleep(2)
+```
+
+Once computed, the diff is cached. Subsequent requests for the same action return `200` immediately.
+
+## Response schema
+
+A `200` response returns a `RemediationDiff` object:
+
+```json
+{
+  "action_id": "018f1234-...",
+  "original_span_id": "018f1235-...",
+  "remediated_span_id": "018f1236-...",
+  "token_length_delta": -42,
+  "latency_delta_ms": 120,
+  "embedding_similarity": 0.87,
+  "score_deltas": [
+    {
+      "eval_rule_id": "018f1237-...",
+      "rule_name": "Correctness",
+      "original_score": 0.3,
+      "remediated_score": 0.9,
+      "delta": 0.6
+    }
+  ],
+  "summary": "Remediated output 12% shorter, embedding similarity 0.87, correctness +0.6"
+}
+```
+
+### `embedding_similarity`
+
+Embedding similarity is the cosine similarity between the original and remediated output embeddings, computed by Claude Haiku 4.5. The value ranges from `0.0` to `1.0`.
+
+A value of **`-1.0`** is a sentinel meaning the embedding computation failed — treat it as unavailable and do not render it as a score. This can occur when the model is temporarily unavailable or when the output is too short to embed meaningfully.
+
+### `score_deltas`
+
+Each entry in `score_deltas` corresponds to one eval rule that scored both the original and remediated spans. `delta` is `remediated_score - original_score`, so a positive delta means the retry improved the score on that rule.
+
+If an eval rule did not score one or both spans — for example, because the rule was added after the original trace was ingested — it does not appear in the array.
+
+## Access and plan requirements
+
+The diff endpoint is gated to the Team+ plan. Starter and Pro tenants receive `402` with `code: "plan_upgrade_required"`. The endpoint is dashboard-accessible — it cannot be reached via API key.
+
+All three dashboard roles (owner, member, viewer) can read diffs. Only owners can execute control actions that produce them.
+
+## Error reference
+
+| Status | Condition |
+|--------|-----------|
+| `200` | Diff is available |
+| `202` | Evaluation still running — poll again |
+| `404` | Action not found or belongs to a different tenant |
+| `422` | Action type does not produce a diff (`fallback_model` or `prompt_modification`) |
+
+## Next steps
+
+- [Control loop dashboard guide](/dashboard/control) — view and manage control actions in the UI
+- [API reference](/api-reference/introduction) — full `RemediationDiff` and `ScoreDelta` schema definitions
+- [Changelog](/guides/changelog) — recent additions and changes
