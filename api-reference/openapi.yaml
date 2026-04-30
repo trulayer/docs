@@ -1999,6 +1999,50 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /v1/projects/{id}/metrics:
+    get:
+      operationId: getProjectMetric
+      tags: [projects, metrics]
+      summary: Read a single project-scoped metric (TRU-362)
+      description: |
+        Returns a project-scoped scalar metric over a fixed window.
+        Currently supports the `retry_cap_hit` metric (count of
+        `control_actions` rows whose escalation reason is
+        `retry_threshold_exceeded` within the requested window). Returns
+        `0` (not null) when no rows match.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: metric
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [retry_cap_hit]
+        - name: window
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: ["7d", "30d"]
+      responses:
+        "200":
+          description: Metric value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMetricResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: Unsupported metric or window
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /v1/datasets:
     get:
       operationId: listDatasets
@@ -3341,6 +3385,15 @@ components:
           additionalProperties: { type: string }
         metadata: { type: object, additionalProperties: true }
         span_count: { type: integer }
+        control_loop_depth:
+          description: |
+            Number of executed retry control_actions rows attached to this
+            trace (TRU-362). Escalations are excluded from the count —
+            once an attempt is auto-converted to `escalate`, it does not
+            advance the depth. Omitted on the trace list response;
+            populated only on the trace detail response.
+          type: integer
+          nullable: true
         spans:
           type: array
           items: { $ref: "#/components/schemas/Span" }
@@ -3612,6 +3665,7 @@ components:
         - rollout_pct
         - dry_run
         - created_by
+        - max_retry_depth
       properties:
         id:
           type: string
@@ -3654,6 +3708,16 @@ components:
         created_by:
           type: string
           description: Clerk user ID of the author.
+        max_retry_depth:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: |
+            Per-policy retry depth cap (TRU-362). When the executor counts
+            this many or more previously-executed retry actions on a trace
+            for this policy, the next retry is auto-converted to an
+            `escalate` action and routed through the HITL pending_approval
+            queue. Default 3.
 
     CreatePolicyRequest:
       type: object
@@ -3683,6 +3747,14 @@ components:
         dry_run:
           type: boolean
           default: true
+        max_retry_depth:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 3
+          description: |
+            Per-policy retry depth cap (TRU-362). Out-of-range values
+            return HTTP 422.
 
     UpdatePolicyRequest:
       type: object
@@ -3709,6 +3781,13 @@ components:
         status:
           type: string
           enum: [draft, active, paused, archived]
+        max_retry_depth:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: |
+            Per-policy retry depth cap (TRU-362). Out-of-range values
+            return HTTP 422.
 
     PolicyListResponse:
       type: object
@@ -4277,6 +4356,24 @@ components:
       properties:
         name: { type: string }
         description: { type: string, nullable: true }
+
+    ProjectMetricResponse:
+      type: object
+      required: [metric, value, window]
+      description: |
+        Single project-scoped metric value (TRU-362). `value` is always an
+        integer count; `0` is returned (not null) when no rows match.
+      properties:
+        metric:
+          type: string
+          enum: [retry_cap_hit]
+        value:
+          type: integer
+          format: int64
+          minimum: 0
+        window:
+          type: string
+          enum: ["7d", "30d"]
 
     Project:
       type: object
