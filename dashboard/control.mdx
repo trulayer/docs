@@ -69,6 +69,12 @@ Use it when a bad policy is causing more harm than the underlying issue. Release
 
 Only users with role `owner` can approve/reject. See [Team settings](./settings-team) for roles.
 
+### Auto-escalated traces
+
+When a `retry`-action policy hits its `max_retry_depth` cap, the control loop automatically converts the retry into an escalation. These traces appear in the HITL queue with `escalation_reason: "retry_threshold_exceeded"` in the action metadata, alongside the `retry_count` that triggered escalation.
+
+Use the escalation reason to distinguish automatically routed traces from manually configured `escalate`-action policies. See the [remediation diffs guide](/guides/remediation-diffs#auto-escalation-and-the-retry-depth-cap) for full details on configuring `max_retry_depth`.
+
 ## Audit trail
 
 Every policy creation, edit, rollout change, kill-switch engagement, and HITL decision is recorded in **Control → Audit log**. Export to CSV for SOC 2 reviews.

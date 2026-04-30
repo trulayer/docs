@@ -1,30 +1,34 @@
 ---
 title: Remediation diffs
-description: Compare original and remediated span outputs after a control-loop retry action.
+description: Compare original and remediated span outputs after a control-loop action.
 ---
 
-After the control loop retries a failing LLM call, you can retrieve a structured diff that shows exactly what changed between the original span and the remediated one. This guide explains how to fetch that diff, how to handle the lazy-computation pattern, and what each field means.
+After the control loop remediates a failing LLM call, you can retrieve a structured diff that shows exactly what changed between the original span and the remediated one. This guide explains how to fetch that diff, how to handle the lazy-computation pattern, and what each field means.
 
 ## What is a remediation diff?
 
-When a `retry` control action runs, TruLayer reruns the LLM call under the same policy conditions. The diff endpoint (`GET /v1/control/actions/{id}/diff`) compares the two span outputs and returns:
+When a control action runs and produces a remediated span, TruLayer computes a structured before/after diff. The diff endpoint (`GET /v1/control/actions/{id}/diff`) compares the two span outputs and returns:
 
 - **Token length delta** — how many tokens the remediated output added or removed
 - **Latency delta** — how many milliseconds faster or slower the remediated call was
 - **Embedding similarity** — cosine similarity between the original and remediated outputs, computed by Claude Haiku 4.5
 - **Score deltas** — for each eval rule that scored both spans, the before and after scores and the delta
 
-Use remediation diffs to audit whether a retry improved quality, to tune retry policies, or to surface regressions when a retry makes things worse.
+Use remediation diffs to audit whether a remediation improved quality holistically, to tune your policies, or to catch regressions where a fix on one eval dimension introduced a regression on another.
 
 ## Which action types produce a diff?
 
-Only `retry` actions produce a diff. If you call the endpoint for a `fallback_model` or `prompt_modification` action, the API returns `422`:
+All three action types that produce a remediated span support the diff endpoint:
 
-```json
-{ "reason": "no_remediated_span" }
-```
+| Action type | Produces a diff? |
+|-------------|-----------------|
+| `retry` | Yes |
+| `fallback_model` | Yes |
+| `prompt_modification` | Yes |
 
-Check the `action_type` on the control action before calling the diff endpoint. Actions of type `retry` always have a `remediated_span_id` once the retry completes.
+For all three action types, the remediated span is published to the trace and eval rules re-fire on it. Once evaluation completes on both spans, the diff is available.
+
+There is no action type in the current API that returns `422` from the diff endpoint. HTTP `422` is reserved for future action types that do not produce a new output span.
 
 ## Fetching a diff
 
@@ -131,10 +135,80 @@ All three dashboard roles (owner, member, viewer) can read diffs. Only owners ca
 | `200` | Diff is available |
 | `202` | Evaluation still running — poll again |
 | `404` | Action not found or belongs to a different tenant |
-| `422` | Action type does not produce a diff (`fallback_model` or `prompt_modification`) |
+| `422` | Reserved — action type produces no new output span (none currently) |
+
+## Auto-escalation and the retry depth cap
+
+When a policy's action type is `retry`, the control loop will automatically stop retrying and escalate to HITL if a single trace has been retried too many times. This prevents unbounded retry cascades.
+
+### `max_retry_depth`
+
+Every `retry`-action policy has a `max_retry_depth` field (integer, 1–10, default `3`). Set it when creating or updating a policy:
+
+```bash
+# Create a policy with a custom retry cap
+curl -X POST https://api.trulayer.ai/v1/control/policies \
+  -H "Authorization: Bearer tl_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Hallucination retry",
+    "action_type": "retry",
+    "max_retry_depth": 2,
+    ...
+  }'
+
+# Update the cap on an existing policy
+curl -X PATCH https://api.trulayer.ai/v1/control/policies/{id} \
+  -H "Authorization: Bearer tl_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "max_retry_depth": 5 }'
+```
+
+Values outside `[1, 10]` return `422` with a field-level validation error.
+
+### How escalation fires
+
+When the control loop is about to fire a retry and the trace's `retry_count` is already equal to or greater than `max_retry_depth`, the action is automatically converted to an `escalate` action:
+
+- `require_approval` is set to `true`.
+- The action's `metadata` includes `escalation_reason: "retry_threshold_exceeded"` and `retry_count: <N>`.
+- The trace is routed to the HITL pending-approval queue — no further automatic retries occur for that policy on that trace.
+
+Example action metadata when auto-escalation fires:
+
+```json
+{
+  "escalation_reason": "retry_threshold_exceeded",
+  "retry_count": 3
+}
+```
+
+### Retry cap hit metric
+
+Monitor how often auto-escalation fires across your project using the `retry_cap_hit` project metric:
+
+```bash
+curl "https://api.trulayer.ai/v1/projects/{id}/metrics?metric=retry_cap_hit&window=7d" \
+  -H "Authorization: Bearer tl_..."
+```
+
+Response:
+
+```json
+{ "metric": "retry_cap_hit", "value": 5, "window": "7d" }
+```
+
+In the dashboard, the **Retry cap hit** count appears on the project overview. Clicking it opens a filtered trace list showing only traces where `escalation_reason: "retry_threshold_exceeded"` — so you can inspect each case and decide whether to raise the cap, fix the policy trigger, or take no action.
+
+### `control_loop_depth` on traces
+
+`GET /v1/traces/{id}` includes a `control_loop_depth` integer field counting the number of retry actions that executed on the trace. Escalation actions are not counted. Use this field to understand how many attempts the system made before succeeding or escalating.
+
+See [Control](/dashboard/control#policies) for policy configuration in the dashboard and [Traces](/dashboard/traces#header) for how `control_loop_depth` appears in the trace detail view.
 
 ## Next steps
 
 - [Control loop dashboard guide](/dashboard/control) — view and manage control actions in the UI
 - [API reference](/api-reference/introduction) — full `RemediationDiff` and `ScoreDelta` schema definitions
+- [Metrics](/concepts/metrics#project-scoped-metrics) — `retry_cap_hit` project metric reference
 - [Changelog](/guides/changelog) — recent additions and changes
