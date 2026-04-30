@@ -1773,6 +1773,175 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
 
+  /v1/prompts/deployments:
+    get:
+      operationId: listPromptDeployments
+      tags: [prompts]
+      summary: List closed-loop prompt-improvement deployments
+      description: |
+        Returns the tenant's prompt deployments — proposed, A/B-tested,
+        shipped, monitoring, regressed, or rolled-back. Dashboard-only;
+        Team+ plan. TRU-369.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [proposed, ab_running, ab_passed, ab_failed, shipped, monitoring, regressed, rolled_back, rejected]
+        - name: project_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Prompt deployment list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptDeploymentListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          description: Plan upgrade required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/prompts/deployments/{id}:
+    get:
+      operationId: getPromptDeployment
+      tags: [prompts]
+      summary: Get a single prompt deployment by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Prompt deployment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptDeployment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/prompts/deployments/{id}/approve:
+    post:
+      operationId: approvePromptDeployment
+      tags: [prompts]
+      summary: Approve a prompt deployment for ship (owner-only)
+      description: |
+        Transitions an `ab_passed` (or `proposed`) deployment to `shipped`
+        and stamps `shipped_at` + `approved_by`. TRU-369.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Updated prompt deployment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptDeployment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Deployment is not in a state that allows approve
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/prompts/deployments/{id}/reject:
+    post:
+      operationId: rejectPromptDeployment
+      tags: [prompts]
+      summary: Reject a non-terminal prompt deployment (owner-only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Optional short reason; stored on the row.
+      responses:
+        "200":
+          description: Updated prompt deployment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptDeployment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Deployment is already in a terminal state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/prompts/deployments/{id}/rollback:
+    post:
+      operationId: rollbackPromptDeployment
+      tags: [prompts]
+      summary: Roll a shipped or monitoring/regressed prompt deployment back (owner-only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Updated prompt deployment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PromptDeployment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Deployment is not in a state that allows rollback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /v1/apikeys:
     post:
       operationId: createAPIKey
@@ -3996,7 +4165,7 @@ components:
 
     Evaluation:
       type: object
-      required: [id, trace_id, project_id, metric_name, evaluator_type, status]
+      required: [id, trace_id, project_id, metric_name, evaluator_type, status, context]
       properties:
         id: { type: string, format: uuid }
         trace_id: { type: string, format: uuid }
@@ -4007,6 +4176,32 @@ components:
         score: { type: number, nullable: true }
         label: { type: string, nullable: true }
         reasoning: { type: string, nullable: true }
+        context:
+          type: string
+          enum: [fresh, remediation]
+          description: |
+            Distinguishes a fresh evaluation against a newly-ingested
+            trace (`fresh`) from a re-score the eval runner stamped
+            after the executor re-published a remediated trace
+            (`remediation`). Defaults to `fresh` for evaluations
+            triggered before remediation tracking shipped (TRU-370).
+        source_action_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Control action that drove this remediation re-score
+            (only set when `context = remediation`). Points at
+            `GET /v1/control/actions/{id}` so the dashboard can show
+            "this eval was triggered by THAT action".
+        original_evaluation_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Evaluation whose score drove the policy decision behind
+            `source_action_id` — the baseline the regression detector
+            compares this eval against. Null on fresh evaluations.
 
     EvalListResponse:
       type: object
@@ -4560,6 +4755,81 @@ components:
         active:
           type: boolean
           description: True when the control-loop kill-switch is active for the tenant.
+
+    PromptDeployment:
+      type: object
+      description: |
+        A closed-loop prompt-improvement deployment record (TRU-369).
+        Tracks one cluster-targeted proposal through its lifecycle:
+        `proposed → ab_running → ab_passed → shipped → monitoring →
+        (regressed → rolled_back)` (or `→ rejected` from any non-terminal
+        state, `→ ab_failed` from `ab_running`).
+      required:
+        - id
+        - tenant_id
+        - project_id
+        - cluster_signature
+        - status
+        - current_prompt
+        - proposed_prompt
+        - created_at
+        - updated_at
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        cluster_signature:
+          type: string
+          description: Stable hash of (project_id, cluster_error) so the same cluster across runs maps to the same signature.
+        status:
+          type: string
+          enum:
+            - proposed
+            - ab_running
+            - ab_passed
+            - ab_failed
+            - shipped
+            - monitoring
+            - regressed
+            - rolled_back
+            - rejected
+        current_prompt: { type: string, description: System prompt at the time of proposal — the "before" side. }
+        proposed_prompt: { type: string, description: LLM-generated improved prompt — the "after" side. }
+        rationale:
+          type: string
+          description: One-sentence explanation from the LLM, rendered next to the diff.
+        ab_report:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Full delta report from internal/promptab once the harness completes.
+        regression_metric:
+          type: number
+          format: double
+          nullable: true
+          description: Rolling regression metric while in monitoring/regressed status.
+        shipped_at: { type: string, format: date-time, nullable: true }
+        rolled_back_at: { type: string, format: date-time, nullable: true }
+        approved_by:
+          type: string
+          nullable: true
+          description: Clerk user ID of the actor (or "system:autoship" / "system:auto_rollback").
+        rejection_reason:
+          type: string
+          description: Optional short reason on reject; empty string when not set.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    PromptDeploymentListResponse:
+      type: object
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/PromptDeployment" }
+        total: { type: integer, format: int64 }
+        limit: { type: integer }
+        offset: { type: integer }
 
     ScoreDelta:
       type: object
