@@ -4165,7 +4165,7 @@ components:
 
     Evaluation:
       type: object
-      required: [id, trace_id, project_id, metric_name, evaluator_type, status]
+      required: [id, trace_id, project_id, metric_name, evaluator_type, status, context]
       properties:
         id: { type: string, format: uuid }
         trace_id: { type: string, format: uuid }
@@ -4176,6 +4176,32 @@ components:
         score: { type: number, nullable: true }
         label: { type: string, nullable: true }
         reasoning: { type: string, nullable: true }
+        context:
+          type: string
+          enum: [fresh, remediation]
+          description: |
+            Distinguishes a fresh evaluation against a newly-ingested
+            trace (`fresh`) from a re-score the eval runner stamped
+            after the executor re-published a remediated trace
+            (`remediation`). Defaults to `fresh` for evaluations
+            triggered before remediation tracking shipped (TRU-370).
+        source_action_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Control action that drove this remediation re-score
+            (only set when `context = remediation`). Points at
+            `GET /v1/control/actions/{id}` so the dashboard can show
+            "this eval was triggered by THAT action".
+        original_evaluation_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Evaluation whose score drove the policy decision behind
+            `source_action_id` — the baseline the regression detector
+            compares this eval against. Null on fresh evaluations.
 
     EvalListResponse:
       type: object
