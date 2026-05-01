@@ -3835,6 +3835,7 @@ components:
         - dry_run
         - created_by
         - max_retry_depth
+        - max_cascade_depth
       properties:
         id:
           type: string
@@ -3887,6 +3888,19 @@ components:
             for this policy, the next retry is auto-converted to an
             `escalate` action and routed through the HITL pending_approval
             queue. Default 3.
+        max_cascade_depth:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: |
+            Per-policy cascade depth cap (TRU-371). Counts every
+            remediation action on the trace — `retry` plus
+            `fallback_model` plus `prompt_modification` — across all
+            policies. When the count reaches this many, the next
+            remediation is auto-converted to `escalate` and parked in
+            the HITL queue. Distinct from `max_retry_depth` which
+            counts retries only; both gates run per `Execute` call and
+            whichever fires first wins. Default 5.
 
     CreatePolicyRequest:
       type: object
@@ -3924,6 +3938,15 @@ components:
           description: |
             Per-policy retry depth cap (TRU-362). Out-of-range values
             return HTTP 422.
+        max_cascade_depth:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 5
+          description: |
+            Per-policy cascade depth cap (TRU-371). Counts retry +
+            fallback_model + prompt_modification combined per trace,
+            across policies. Out-of-range values return HTTP 422.
 
     UpdatePolicyRequest:
       type: object
@@ -3957,6 +3980,14 @@ components:
           description: |
             Per-policy retry depth cap (TRU-362). Out-of-range values
             return HTTP 422.
+        max_cascade_depth:
+          type: integer
+          minimum: 1
+          maximum: 20
+          description: |
+            Per-policy cascade depth cap (TRU-371). Counts retry +
+            fallback_model + prompt_modification combined per trace,
+            across policies. Out-of-range values return HTTP 422.
 
     PolicyListResponse:
       type: object
