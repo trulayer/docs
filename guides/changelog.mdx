@@ -3,6 +3,39 @@ title: Changelog
 description: Recent API and SDK changes.
 ---
 
+## 2026-05-02
+
+### Added: Closed-loop prompt improvement — prompt deployments, remediation context on evals, and regression detection
+
+Control Loop v1.5 ships three related surfaces:
+
+**Prompt deployments (`GET/POST /v1/prompts/deployments/*`)** — The platform now clusters production failures, asks an LLM to synthesise a candidate prompt diff, validates it in a sandboxed A/B replay, and proposes the result for review. Five new endpoints manage the deployment lifecycle:
+
+| Method | Path | What it does |
+|--------|------|--------------|
+| `GET` | `/v1/prompts/deployments` | List deployments, filterable by `status` and `project_id` |
+| `GET` | `/v1/prompts/deployments/{id}` | Get a single deployment |
+| `POST` | `/v1/prompts/deployments/{id}/approve` | Approve an `ab_passed` deployment for ship (owner-only) |
+| `POST` | `/v1/prompts/deployments/{id}/reject` | Reject any non-terminal deployment (owner-only) |
+| `POST` | `/v1/prompts/deployments/{id}/rollback` | Roll back a shipped or regressed deployment (owner-only) |
+
+All endpoints require Team+ plan and Clerk session authentication (dashboard-only). The `PromptDeployment` schema is now in the API reference. See the [control loop quickstart](/control-loop/quickstart) and the [prompt improvements dashboard guide](/dashboard/prompt-improvements).
+
+**`prompt_autoship_enabled` on projects (default `false`)** — Controls whether `ab_passed` deployments ship automatically or wait for owner approval. Configure via `PATCH /v1/projects/{id}` or in project settings. See the [control loop quickstart](/control-loop/quickstart#step-4-ship-the-winning-prompt).
+
+**Remediation context on evaluations** — Three new optional fields on `Evaluation` responses:
+- `context` (`"fresh"` | `"remediation"`) — distinguishes a fresh eval from a re-score triggered by a control action.
+- `source_action_id` (uuid, nullable) — the control action that drove the re-score.
+- `original_evaluation_id` (uuid, nullable) — the baseline eval the regression detector compares against.
+
+These fields are additive. Existing evaluations have `context: "fresh"` and both FK fields as `null`. No changes to ingestion or existing integrations are required.
+
+**`RemediationRegression` failure detection** — When a remediated trace's eval score drops below the original baseline, TruLayer emits a `RemediationRegression` event into the failure pipeline. These appear in `GET /v1/failures/clusters` alongside existing failure types. No configuration is required to receive them.
+
+See the [migration guide](/control-loop/migration-from-v1) for defaults that apply to existing policies and projects.
+
+---
+
 ## 2026-04-30
 
 ### Added: `max_retry_depth` on policies, `control_loop_depth` on trace detail, and `GET /v1/projects/{id}/metrics`

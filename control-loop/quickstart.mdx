@@ -1,0 +1,211 @@
+---
+title: "Control loop quickstart"
+description: "Set up closed-loop prompt improvement in six steps: detect failures, cluster them, propose a prompt diff, run an A/B replay, ship the winner, and roll back automatically if it regresses."
+---
+
+The TruLayer control loop watches your production traces, spots systematic failures, proposes a prompt fix, validates it in a sandboxed A/B replay, and then either ships it automatically or parks it for your review. This guide walks through the full cycle and shows you how to configure the two key safety gates: **HITL approval** and the **cascade depth limit**.
+
+**Requirements:** Team plan or above. Owner role for any mutation (approve, reject, rollback, policy changes). Viewer and Member roles can read all control-loop data.
+
+---
+
+## Step 1 — Detect failures
+
+TruLayer's failure detector (running in the consumer pipeline) clusters incoming traces by their error signature. You do not need to configure anything for detection to work — every span with an `error` field set, and every trace that fails an active eval rule, is automatically fed into the cluster engine.
+
+To confirm detection is working, go to **Dashboard → Failures**. You should see clusters appearing within a few minutes of traces arriving. Each cluster has a **signature** (a stable hash of the project and error type) that links it to any prompt deployment the system proposes later.
+
+For programmatic access, use `GET /v1/failures/clusters`:
+
+```bash
+curl https://api.trulayer.ai/v1/failures/clusters \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+---
+
+## Step 2 — Cluster and propose a prompt diff
+
+When a cluster reaches a threshold size, the cluster-to-diff worker asks the LLM to synthesise a candidate prompt. The result is stored as a **prompt deployment** in the `proposed` state.
+
+You can list pending proposals via the API:
+
+```bash
+curl "https://api.trulayer.ai/v1/prompts/deployments?status=proposed" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+```json
+{
+  "items": [
+    {
+      "id": "018f9ab2-...",
+      "status": "proposed",
+      "cluster_signature": "sha256:abc123...",
+      "current_prompt": "You are a helpful assistant...",
+      "proposed_prompt": "You are a helpful assistant. When you are unsure, say so explicitly...",
+      "rationale": "Added explicit uncertainty instruction to reduce hallucination rate in the detected cluster.",
+      "created_at": "2026-05-01T08:00:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0
+}
+```
+
+In the dashboard, open **Dashboard → Prompt Improvements** to see the same list with a diff view. See [Prompt improvements](/dashboard/prompt-improvements) for the full dashboard guide.
+
+---
+
+## Step 3 — A/B replay and review
+
+Once proposed, the A/B harness replays a held-out trace set against both the current prompt and the candidate. The deployment moves through `ab_running` and lands on either `ab_passed` (candidate recommended) or `ab_failed` (no improvement detected). The `ab_report` field on the deployment carries the full per-metric delta report.
+
+Fetch a deployment by ID to see where it is:
+
+```bash
+curl "https://api.trulayer.ai/v1/prompts/deployments/018f9ab2-..." \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+```json
+{
+  "id": "018f9ab2-...",
+  "status": "ab_passed",
+  "ab_report": {
+    "correctness_baseline": 0.42,
+    "correctness_candidate": 0.71,
+    "correctness_delta": 0.29,
+    "sample_size": 80
+  }
+}
+```
+
+---
+
+## Step 4 — Ship the winning prompt
+
+There are two ways to ship an `ab_passed` deployment: **HITL approval** (the default) or **auto-ship**.
+
+### HITL approval (default)
+
+With `prompt_autoship_enabled` set to `false` on the project (the default), every `ab_passed` deployment waits for an owner to approve it. To approve via the API:
+
+```bash
+curl -X POST \
+  "https://api.trulayer.ai/v1/prompts/deployments/018f9ab2-.../approve" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+The deployment moves to `shipped` and the new prompt is immediately live for that project. The `approved_by` field records your user ID.
+
+To reject a candidate:
+
+```bash
+curl -X POST \
+  "https://api.trulayer.ai/v1/prompts/deployments/018f9ab2-.../reject" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"reason": "Candidate prompt is too verbose for our product voice."}'
+```
+
+In the dashboard, use the **Approve & ship** and **Reject** buttons on the deployment detail page. See [Prompt improvements](/dashboard/prompt-improvements).
+
+### Auto-ship
+
+If you want the platform to ship `ab_passed` deployments automatically without human review, set `prompt_autoship_enabled` to `true` on the project. You do this via **Dashboard → Projects → [project] → Settings** or via `PATCH /v1/projects/{id}`:
+
+```bash
+curl -X PATCH \
+  "https://api.trulayer.ai/v1/projects/YOUR_PROJECT_ID" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt_autoship_enabled": true}'
+```
+
+<Warning>
+  Auto-ship bypasses human review. Enable it only when you are confident in your A/B eval rules and your failure cluster signal is low-noise. The recommendation is to run in HITL mode first, approve several deployments manually, and then enable auto-ship once you trust the pipeline.
+</Warning>
+
+When auto-ship fires, `approved_by` is set to `"system:autoship"` so you can distinguish automated approvals from human ones in the audit trail.
+
+---
+
+## Step 5 — Monitor after shipping
+
+Once a deployment is shipped, it moves to `monitoring`. The regression monitor watches the rolling metric window and compares it to the A/B candidate baseline. You can read the current regression metric from the deployment:
+
+```bash
+curl "https://api.trulayer.ai/v1/prompts/deployments/018f9ab2-..." \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+The `regression_metric` field carries the current rolling value. If it falls below the threshold, the deployment moves to `regressed` and a banner appears across the dashboard. Check **Dashboard → Prompt Improvements** for the regression banner and the post-ship monitoring chart.
+
+---
+
+## Step 6 — Rollback if regressed
+
+When a deployment is in `regressed` or `shipped`/`monitoring`, you can roll it back to the previous prompt:
+
+```bash
+curl -X POST \
+  "https://api.trulayer.ai/v1/prompts/deployments/018f9ab2-.../rollback" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+The deployment moves to `rolled_back` and the prior prompt is restored immediately. If auto-rollback is configured, the platform fires this transition automatically; `approved_by` is set to `"system:auto_rollback"` in that case.
+
+---
+
+## Configuring the safety gates
+
+### `prompt_autoship_enabled` (per project)
+
+| Value | Behaviour |
+|-------|-----------|
+| `false` (default) | `ab_passed` deployments wait for an owner to approve via dashboard or API. |
+| `true` | `ab_passed` deployments ship automatically. `approved_by` is `"system:autoship"`. |
+
+Configure it on the project via **Dashboard → Projects → [project] → Settings** or `PATCH /v1/projects/{id}`.
+
+### `max_retry_depth` (per policy)
+
+Policies with `action_type: retry` will retry a trace up to `max_retry_depth` times. When this limit is reached, the next retry is automatically converted to an `escalate` action and the trace enters the HITL queue. This prevents unbounded retry loops.
+
+```bash
+curl -X PATCH \
+  "https://api.trulayer.ai/v1/policies/YOUR_POLICY_ID" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"max_retry_depth": 2}'
+```
+
+**Default:** 3. Valid range: 1–10. A value of 1 means a single retry before the policy escalates.
+
+**Worked example:** A policy has `max_retry_depth: 2`. The trace hits the policy and is retried once (`control_loop_depth: 1`). The retry fails the eval again and is retried a second time (`control_loop_depth: 2`). The second retry also fails. On the third attempt, the retry is auto-converted to `escalate` and the trace goes to the HITL queue. No further retries occur; a human must approve or reject it.
+
+---
+
+## Endpoint reference
+
+| Method | Path | What it does |
+|--------|------|--------------|
+| `GET` | `/v1/prompts/deployments` | List deployments. Filter by `status`, `project_id`. |
+| `GET` | `/v1/prompts/deployments/{id}` | Get a single deployment by ID. |
+| `POST` | `/v1/prompts/deployments/{id}/approve` | Approve an `ab_passed` (or `proposed`) deployment. Owner only. |
+| `POST` | `/v1/prompts/deployments/{id}/reject` | Reject any non-terminal deployment. Owner only. |
+| `POST` | `/v1/prompts/deployments/{id}/rollback` | Roll back a `shipped` or `monitoring`/`regressed` deployment. Owner only. |
+
+All endpoints require the Team+ plan and Clerk session authentication (dashboard-only; not reachable via API key). Owners can mutate; viewers and members can read.
+
+---
+
+## Next steps
+
+- [Prompt improvements dashboard guide](/dashboard/prompt-improvements) — review deployments, the diff view, and the monitoring chart in the UI
+- [Control loop dashboard guide](/dashboard/control) — manage policies, the HITL queue, and the kill-switch
+- [Remediation diffs guide](/guides/remediation-diffs) — inspect per-span output diffs after a retry action
+- [API reference](/api-reference/introduction) — full `PromptDeployment` schema and parameter details
+- [Changelog](/guides/changelog) — recent updates
