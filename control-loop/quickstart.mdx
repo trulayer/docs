@@ -186,6 +186,38 @@ curl -X PATCH \
 
 **Worked example:** A policy has `max_retry_depth: 2`. The trace hits the policy and is retried once (`control_loop_depth: 1`). The retry fails the eval again and is retried a second time (`control_loop_depth: 2`). The second retry also fails. On the third attempt, the retry is auto-converted to `escalate` and the trace goes to the HITL queue. No further retries occur; a human must approve or reject it.
 
+### `max_cascade_depth` (per policy)
+
+`max_cascade_depth` is a broader safety gate than `max_retry_depth`. Where `max_retry_depth` counts only `retry` actions for a single policy, `max_cascade_depth` counts every remediation action — `retry`, `fallback_model`, and `prompt_modification` — across all policies on a trace. When the total reaches the cap, the next remediation is auto-converted to `escalate` and parked in the HITL queue.
+
+Both gates run on every control-loop execution. The cascade gate runs first because it spans the wider budget. If neither gate fires, normal action execution proceeds.
+
+```bash
+curl -X PATCH \
+  "https://api.trulayer.ai/v1/policies/YOUR_POLICY_ID" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"max_cascade_depth": 2}'
+```
+
+**Default:** 5. Valid range: 1–20.
+
+**Worked example — `retry → fallback_model → prompt_modification` with `max_cascade_depth: 2`:**
+
+Consider a trace that fails an eval and is processed by three policies in sequence:
+
+1. **Action 1 (retry):** The retry policy fires. The trace is retried (`total remediation count: 1`). The retry still fails the eval.
+2. **Action 2 (fallback_model):** A second policy fires and switches the model (`total remediation count: 2`). The fallback model response still fails the eval.
+3. **Action 3 (prompt_modification) — cascade gate trips:** A third policy fires and would apply a prompt modification. The cascade gate runs first and sees `total remediation count: 2`, which equals `max_cascade_depth: 2`. The prompt modification is auto-converted to `escalate` and the trace enters the HITL pending-approval queue. No further automatic remediations occur.
+
+In the HITL queue, you can inspect the trace's remediation history and either approve the escalation (sending the trace for human review) or reject it (closing the loop). The `escalation_reason` in the action metadata is set to `cascade_depth_exhausted` so you can distinguish this from a `retry_threshold_exceeded` escalation produced by `max_retry_depth`.
+
+<Note>
+  Use `max_cascade_depth` when your policies can chain across action types — for example, a retry policy followed by a fallback-model policy on the same eval rule. Without a cascade cap, a trace that fails every action type in sequence could accumulate an unbounded number of remediations before any human sees it.
+</Note>
+
+See [`max_retry_depth`](#max_retry_depth-per-policy) for the retry-only gate and [API reference](/api-reference/introduction) for the full `Policy` schema.
+
 ---
 
 ## Endpoint reference

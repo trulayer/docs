@@ -32,6 +32,8 @@ These fields are additive. Existing evaluations have `context: "fresh"` and both
 
 **`RemediationRegression` failure detection** — When a remediated trace's eval score drops below the original baseline, TruLayer emits a `RemediationRegression` event into the failure pipeline. These appear in `GET /v1/failures/clusters` alongside existing failure types. No configuration is required to receive them.
 
+**`max_cascade_depth` on policies (default 5)** — A new per-policy field that caps the total number of remediation actions — `retry`, `fallback_model`, and `prompt_modification` combined — across all policies on a single trace. When the count reaches the cap, the next remediation is auto-converted to `escalate` and parked in the HITL queue with `escalation_reason: "cascade_depth_exhausted"`. This is distinct from `max_retry_depth` (TRU-362), which counts only `retry` actions for a single policy. Both gates are enforced on every control-loop execution; the cascade gate runs first. Valid range: 1–20. See the [control loop quickstart — cascade depth gate](/control-loop/quickstart#max_cascade_depth-per-policy) and the [API reference](/api-reference/introduction) for the full `Policy` schema.
+
 See the [migration guide](/control-loop/migration-from-v1) for defaults that apply to existing policies and projects.
 
 ---
