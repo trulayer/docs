@@ -5,9 +5,9 @@ description: Recent API and SDK changes.
 
 ## 2026-05-02
 
-### Added: Closed-loop prompt improvement — prompt deployments, remediation context on evals, and regression detection
+### Added: Control Loop v0.1 — prompt deployments, remediation context on evals, and regression detection
 
-Control Loop v1.5 ships three related surfaces:
+Control Loop v0.1 ships three related surfaces:
 
 **Prompt deployments (`GET/POST /v1/prompts/deployments/*`)** — The platform now clusters production failures, asks an LLM to synthesise a candidate prompt diff, validates it in a sandboxed A/B replay, and proposes the result for review. Five new endpoints manage the deployment lifecycle:
 
@@ -34,7 +34,7 @@ These fields are additive. Existing evaluations have `context: "fresh"` and both
 
 **`max_cascade_depth` on policies (default 5)** — A new per-policy field that caps the total number of remediation actions — `retry`, `fallback_model`, and `prompt_modification` combined — across all policies on a single trace. When the count reaches the cap, the next remediation is auto-converted to `escalate` and parked in the HITL queue with `escalation_reason: "cascade_depth_exhausted"`. This is distinct from `max_retry_depth` (TRU-362), which counts only `retry` actions for a single policy. Both gates are enforced on every control-loop execution; the cascade gate runs first. Valid range: 1–20. See the [control loop quickstart — cascade depth gate](/control-loop/quickstart#max_cascade_depth-per-policy) and the [API reference](/api-reference/introduction) for the full `Policy` schema.
 
-See the [migration guide](/control-loop/migration-from-v1) for defaults that apply to existing policies and projects.
+See the [migration guide](/control-loop/migration-notes) for defaults that apply to existing policies and projects.
 
 ---
 

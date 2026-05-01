@@ -1,9 +1,9 @@
 ---
-title: "Migrating from Control Loop v1"
-description: "What defaults apply when you haven't set max_cascade_depth or prompt_autoship_enabled, and what changed in Control Loop v1.5."
+title: "Control Loop v0.1 migration notes"
+description: "What defaults apply when you haven't set max_cascade_depth or prompt_autoship_enabled, and what changed in Control Loop v0.1."
 ---
 
-Control Loop v1.5 adds two new configuration fields (`max_cascade_depth` on policies and `prompt_autoship_enabled` on projects) and three new fields on evaluation responses (`context`, `source_action_id`, `original_evaluation_id`). This page explains what each default means for your existing setup and what, if anything, you need to change.
+Control Loop v0.1 adds two new configuration fields (`max_cascade_depth` on policies and `prompt_autoship_enabled` on projects) and three new fields on evaluation responses (`context`, `source_action_id`, `original_evaluation_id`). This page explains what each default means for your existing setup and what, if anything, you need to change.
 
 ---
 
@@ -21,7 +21,7 @@ Every existing and new project has `prompt_autoship_enabled` set to `false` unle
 
 **Default:** 3
 
-`max_retry_depth` shipped in the previous release (Control Loop v1, 2026-04-30). If you have existing policies with `action_type: retry`, each one already has `max_retry_depth: 3` — meaning after three retries on a single trace, the next attempt is auto-converted to an `escalate` action and routed to the HITL queue.
+`max_retry_depth` shipped in the 2026-04-30 release. If you have existing policies with `action_type: retry`, each one already has `max_retry_depth: 3` — meaning after three retries on a single trace, the next attempt is auto-converted to an `escalate` action and routed to the HITL queue.
 
 If you want more or fewer automatic retries before escalation, update the value on each policy via `PATCH /v1/policies/{id}` or in **Dashboard → Control → Policies**. Valid range: 1–10.
 
@@ -29,7 +29,7 @@ If you want more or fewer automatic retries before escalation, update the value 
 
 ## New evaluation fields
 
-Three new optional fields appear on evaluation response objects (`GET /v1/eval`, `GET /v1/eval/{id}`) as of Control Loop v1.5:
+Three new optional fields appear on evaluation response objects (`GET /v1/eval`, `GET /v1/eval/{id}`) as of Control Loop v0.1:
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
@@ -59,7 +59,7 @@ These endpoints are additive and dashboard-only (Clerk session auth, Team+ plan)
 
 ## Regression detection
 
-Evaluations triggered by a control action's remediated trace now carry `context: "remediation"`. When the remediaton eval's score drops below the original eval's score (the baseline stored in `original_evaluation_id`), TruLayer emits a `RemediationRegression` failure detection event. This is a new alert type — existing failure rules and webhooks are unaffected unless you add a new rule that matches on it.
+Evaluations triggered by a control action's remediated trace now carry `context: "remediation"`. When the remediation eval's score drops below the original eval's score (the baseline stored in `original_evaluation_id`), TruLayer emits a `RemediationRegression` failure detection event. This is a new alert type — existing failure rules and webhooks are unaffected unless you add a new rule that matches on it.
 
 **Action required:** None unless you want to surface regression alerts in your own tooling. If you use webhooks or the `GET /v1/failures/clusters` endpoint, regression events will appear automatically once the feature is active.
 

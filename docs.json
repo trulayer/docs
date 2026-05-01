@@ -108,7 +108,7 @@
             "group": "Control loop",
             "pages": [
               "control-loop/quickstart",
-              "control-loop/migration-from-v1"
+              "control-loop/migration-notes"
             ]
           },
           {
