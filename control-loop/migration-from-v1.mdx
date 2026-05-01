@@ -1,0 +1,85 @@
+---
+title: "Migrating from Control Loop v1"
+description: "What defaults apply when you haven't set max_cascade_depth or prompt_autoship_enabled, and what changed in Control Loop v1.5."
+---
+
+Control Loop v1.5 adds two new configuration fields (`max_cascade_depth` on policies and `prompt_autoship_enabled` on projects) and three new fields on evaluation responses (`context`, `source_action_id`, `original_evaluation_id`). This page explains what each default means for your existing setup and what, if anything, you need to change.
+
+---
+
+## New fields and their defaults
+
+### `prompt_autoship_enabled` on projects
+
+**Default:** `false`
+
+Every existing and new project has `prompt_autoship_enabled` set to `false` unless you explicitly enable it. This means all `ab_passed` prompt deployments wait for an owner to approve them manually before going live. Nothing ships to production automatically until you opt in.
+
+**Action required:** None, unless you want auto-ship. To enable it on a project, set `prompt_autoship_enabled: true` via `PATCH /v1/projects/{id}` or in **Dashboard → Projects → [project] → Settings**.
+
+### `max_retry_depth` on policies
+
+**Default:** 3
+
+`max_retry_depth` shipped in the previous release (Control Loop v1, 2026-04-30). If you have existing policies with `action_type: retry`, each one already has `max_retry_depth: 3` — meaning after three retries on a single trace, the next attempt is auto-converted to an `escalate` action and routed to the HITL queue.
+
+If you want more or fewer automatic retries before escalation, update the value on each policy via `PATCH /v1/policies/{id}` or in **Dashboard → Control → Policies**. Valid range: 1–10.
+
+---
+
+## New evaluation fields
+
+Three new optional fields appear on evaluation response objects (`GET /v1/eval`, `GET /v1/eval/{id}`) as of Control Loop v1.5:
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `context` | `"fresh"` \| `"remediation"` | `"fresh"` | Whether this eval scored a newly-ingested trace or a remediated re-run after a control action. |
+| `source_action_id` | `string (uuid)` \| `null` | `null` | The control action that triggered this eval (only set when `context = "remediation"`). |
+| `original_evaluation_id` | `string (uuid)` \| `null` | `null` | The baseline eval the regression detector compares against (only set when `context = "remediation"`). |
+
+**Action required for existing integrations:** None. These fields are additive — existing evaluations have `context: "fresh"` and both FK fields as `null`. If your code reads evaluation responses, ensure your JSON deserialiser tolerates unknown or null fields (it should already, per the API versioning policy).
+
+---
+
+## New prompt deployment endpoints
+
+Five new endpoints are available under `/v1/prompts/deployments`:
+
+| Method | Path |
+|--------|------|
+| `GET` | `/v1/prompts/deployments` |
+| `GET` | `/v1/prompts/deployments/{id}` |
+| `POST` | `/v1/prompts/deployments/{id}/approve` |
+| `POST` | `/v1/prompts/deployments/{id}/reject` |
+| `POST` | `/v1/prompts/deployments/{id}/rollback` |
+
+These endpoints are additive and dashboard-only (Clerk session auth, Team+ plan). They do not affect existing API key integrations or SDK clients.
+
+---
+
+## Regression detection
+
+Evaluations triggered by a control action's remediated trace now carry `context: "remediation"`. When the remediaton eval's score drops below the original eval's score (the baseline stored in `original_evaluation_id`), TruLayer emits a `RemediationRegression` failure detection event. This is a new alert type — existing failure rules and webhooks are unaffected unless you add a new rule that matches on it.
+
+**Action required:** None unless you want to surface regression alerts in your own tooling. If you use webhooks or the `GET /v1/failures/clusters` endpoint, regression events will appear automatically once the feature is active.
+
+---
+
+## Summary checklist
+
+| Change | Default | Action needed? |
+|--------|---------|---------------|
+| `prompt_autoship_enabled` on projects | `false` (HITL approval required) | No, unless you want auto-ship |
+| `max_retry_depth` on policies | `3` (already set) | Only if you want a different limit |
+| `context`, `source_action_id`, `original_evaluation_id` on evals | Additive, null-safe | No — ensure your deserialiser tolerates extra fields |
+| Prompt deployment endpoints | New, additive, dashboard-only | No action for SDK-only integrations |
+| `RemediationRegression` failure type | New, additive | No, unless you want to filter on it |
+
+---
+
+## Related
+
+- [Control loop quickstart](/control-loop/quickstart) — full walkthrough of the closed-loop flow
+- [Prompt improvements dashboard guide](/dashboard/prompt-improvements) — review deployments in the UI
+- [Control loop dashboard guide](/dashboard/control) — policies, HITL queue, and kill-switch
+- [Changelog](/guides/changelog) — full version history
