@@ -326,6 +326,42 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /v1/traces/{id}/remediations:
+    get:
+      operationId: getTraceRemediations
+      tags: [traces]
+      summary: Get the remediation chain for a trace
+      description: |
+        Returns the chain of control actions for the trace ordered
+        oldest-first. For `retry` actions the per-action TRU-363
+        diff is inlined under `diff`. For other action types
+        (`fallback_model`, `prompt_modification`, `escalate`) `diff`
+        is null because no remediated span is materialised on the
+        trace. `intended_action_type` is set when the executor's
+        budget gate (TRU-371) auto-converted a retry to escalate.
+        TRU-373.
+
+        Dashboard-only — requires a Clerk session. Plan-gated to Team+
+        (Starter/Pro tenants receive HTTP 402 `plan_upgrade_required`).
+        The data surface mirrors `GET /v1/control/actions/:id/diff`
+        and inherits the same gate.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Chain of remediation steps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceRemediationsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /v1/traces/export:
     get:
       operationId: exportTraces
@@ -4924,6 +4960,51 @@ components:
             $ref: "#/components/schemas/ScoreDelta"
         summary:
           type: string
+        citation_density_delta:
+          type: number
+          format: double
+          nullable: true
+          description: |
+            citations_per_1k_chars(remediated) -
+            citations_per_1k_chars(original). Null for diffs
+            computed before TRU-373 (column nullable, no backfill)
+            and when both outputs are empty. TRU-373.
+
+    TraceRemediationStep:
+      type: object
+      description: One step in a per-trace remediation chain. TRU-373.
+      required: [action_id, action_type, status, created_at]
+      properties:
+        action_id:
+          type: string
+          format: uuid
+        action_type:
+          type: string
+          enum: [retry, fallback_model, prompt_modification, agent_action, escalate]
+        status:
+          type: string
+          enum: [pending, pending_approval, executed, failed]
+        intended_action_type:
+          type: string
+          nullable: true
+          description: |
+            Set when the executor's budget gate (TRU-371) auto-converted
+            the requested action — typically `retry` becoming `escalate`
+            after the per-trace retry cap was exceeded.
+        created_at:
+          type: string
+          format: date-time
+        diff:
+          $ref: "#/components/schemas/RemediationDiff"
+
+    TraceRemediationsResponse:
+      type: object
+      required: [steps]
+      properties:
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraceRemediationStep"
 
     # ── Model Routes ────────────────────────────────────────────────���─────────
 
