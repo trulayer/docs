@@ -946,11 +946,29 @@ paths:
           schema: { type: string, format: uuid }
         - name: window
           in: query
-          description: Rolling time window. Defaults to `24h`.
+          description: |
+            Rolling time window. Defaults to `24h`. Ignored when both `from`
+            and `to` are supplied (TRU-393).
           schema:
             type: string
             enum: [1h, 24h, 7d]
             default: 24h
+        - name: from
+          in: query
+          description: |
+            Inclusive ISO-8601 / RFC 3339 lower bound on the report window.
+            Must be supplied together with `to`. When both are present the
+            explicit range overrides the `window` enum (TRU-393). Bucket
+            granularity in the response scales with the requested span:
+            ≤ 2h → `5m`, ≤ 48h → `1h`, > 48h → `1d`.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: |
+            Inclusive ISO-8601 / RFC 3339 upper bound on the report window.
+            Must be supplied together with `from`. `to` must not precede
+            `from`.
+          schema: { type: string, format: date-time }
       responses:
         "200":
           description: Ingestion-health report
@@ -4171,6 +4189,9 @@ components:
       type: object
       required:
         - window
+        - from
+        - to
+        - bucket_interval
         - success_rate
         - error_rate
         - top_errors
@@ -4186,6 +4207,27 @@ components:
         window:
           type: string
           enum: [1h, 24h, 7d]
+          description: |
+            Echoes the `window` query param. Informational only when an
+            explicit `from`/`to` pair was supplied — the response's
+            `from`/`to` fields are the source of truth for the time bounds
+            actually used.
+        from:
+          type: string
+          format: date-time
+          description: "Inclusive lower bound the report was computed over (TRU-393)."
+        to:
+          type: string
+          format: date-time
+          description: "Inclusive upper bound the report was computed over (TRU-393)."
+        bucket_interval:
+          type: string
+          enum: [5m, 1h, 1d]
+          description: |
+            Bucket granularity that scales with the report's requested
+            range: ≤ 2h → `5m`, ≤ 48h → `1h`, > 48h → `1d` (TRU-393).
+            Frontends that build time-series charts on top of this
+            endpoint should consume this value rather than re-deriving it.
         success_rate:
           type: number
           description: "Fraction 0–1 of traces without an error. 1.0 when no traffic in the window."
