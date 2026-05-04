@@ -964,6 +964,40 @@ paths:
           $ref: "#/components/responses/Unauthorized"
 
   /v1/feedback:
+    get:
+      operationId: listFeedback
+      tags: [feedback]
+      summary: List feedback for the tenant with cursor-based pagination
+      parameters:
+        - name: project_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: trace_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: label
+          in: query
+          schema: { type: string, enum: [good, bad, neutral] }
+        - name: from
+          in: query
+          description: RFC3339 lower bound on `created_at` (inclusive). Optional.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: RFC3339 upper bound on `created_at` (inclusive). Optional. Must be >= `from` when both are set.
+          schema: { type: string, format: date-time }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Feedback list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
     post:
       operationId: submitFeedback
       tags: [feedback]
@@ -2828,6 +2862,14 @@ paths:
         - name: offset
           in: query
           schema: { type: integer, default: 0, minimum: 0 }
+        - name: from
+          in: query
+          description: RFC3339 lower bound on `created_at` (inclusive). Optional.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: RFC3339 upper bound on `created_at` (inclusive). Optional. Must be >= `from` when both are set.
+          schema: { type: string, format: date-time }
       responses:
         "200":
           description: Anomaly list
@@ -4175,6 +4217,31 @@ components:
         score: { type: number, nullable: true }
         comment: { type: string, nullable: true }
         metadata: { type: object, additionalProperties: true }
+
+    Feedback:
+      type: object
+      required: [id, tenant_id, trace_id, label, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid }
+        trace_id: { type: string, format: uuid }
+        user_id: { type: string, nullable: true }
+        label: { type: string, enum: [good, bad, neutral] }
+        comment: { type: string, nullable: true }
+        metadata: { type: object, additionalProperties: true, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    FeedbackListResponse:
+      type: object
+      required: [feedback]
+      properties:
+        feedback:
+          type: array
+          items: { $ref: "#/components/schemas/Feedback" }
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next page. Omitted when there are no more rows.
 
     # ── Evals ────────────────────────────────────────────────────────────────────
 

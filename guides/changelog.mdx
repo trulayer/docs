@@ -3,6 +3,40 @@ title: Changelog
 description: Recent API and SDK changes.
 ---
 
+## 2026-05-04
+
+### Added: `GET /v1/feedback` — list feedback with cursor-based pagination
+
+`GET /v1/feedback` is now fully documented in the API reference. The endpoint was previously undocumented; it accepts the following optional query parameters:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `project_id` | uuid | Filter by project |
+| `trace_id` | uuid | Filter by trace |
+| `label` | `good` \| `bad` \| `neutral` | Filter by label |
+| `from` | ISO-8601 date-time | Lower bound on `created_at` (inclusive) |
+| `to` | ISO-8601 date-time | Upper bound on `created_at` (inclusive). Must be `>= from` when both are set. |
+| `cursor` | string | Opaque cursor for the next page |
+
+Returns a `FeedbackListResponse` with a `feedback` array of `Feedback` objects and an optional `next_cursor` for pagination. Requires viewer+ role or an API key with `query` scope.
+
+See the [API reference](/api-reference/introduction) for full schema details.
+
+### Added: `from` and `to` query params on `GET /v1/anomalies`
+
+`GET /v1/anomalies` now accepts two new optional date-range parameters:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `from` | ISO-8601 date-time | Lower bound on `created_at` (inclusive) |
+| `to` | ISO-8601 date-time | Upper bound on `created_at` (inclusive). Must be `>= from` when both are set. |
+
+These parameters are additive and non-breaking. Existing calls without them continue to work and return the full anomaly list subject to the existing `limit`/`offset` pagination. Requires Pro+ plan and viewer+ role or API key with `query` scope.
+
+See the [API reference](/api-reference/introduction) for full details.
+
+---
+
 ## 2026-05-02
 
 ### Added: Control Loop v0.1 — prompt deployments, remediation context on evals, and regression detection
