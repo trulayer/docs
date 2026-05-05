@@ -1625,6 +1625,14 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, default: 50, minimum: 1, maximum: 100 }
+        - name: from
+          in: query
+          description: RFC3339 lower bound on `created_at` (inclusive). Optional.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: RFC3339 upper bound on `created_at` (inclusive). Optional. Must be >= `from` when both are set.
+          schema: { type: string, format: date-time }
       responses:
         "200":
           description: Control action list
@@ -2873,12 +2881,28 @@ paths:
       operationId: listAnomalies
       tags: [anomaly]
       summary: List detected anomalies for the tenant
+      description: |
+        Returns anomalies for the authenticated tenant ordered by
+        `detected_at DESC, id DESC`. Pagination is cursor-based
+        (TRU-403): callers pass the `next_cursor` value from the
+        previous page as the `cursor` query param to fetch the next
+        page. The legacy `offset` param is still accepted for
+        backward compatibility but is deprecated; new clients must
+        use `cursor`.
       parameters:
         - name: limit
           in: query
           schema: { type: integer, default: 50, minimum: 1, maximum: 100 }
+        - name: cursor
+          in: query
+          description: |
+            Opaque keyset-pagination token returned as `next_cursor`
+            on the previous page. When supplied, `offset` is ignored.
+          schema: { type: string }
         - name: offset
           in: query
+          deprecated: true
+          description: Deprecated — use `cursor`. Retained for legacy callers.
           schema: { type: integer, default: 0, minimum: 0 }
         - name: from
           in: query
@@ -2895,6 +2919,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AnomalyListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
 
@@ -5297,11 +5323,13 @@ components:
 
     AnomalyListResponse:
       type: object
-      required: [anomalies]
+      required: [anomalies, has_more]
       properties:
         anomalies:
           type: array
           items: { $ref: "#/components/schemas/Anomaly" }
+        next_cursor: { type: string, nullable: true }
+        has_more: { type: boolean }
 
     # ── Eval Runs ──────────────────────────────────────────────────────────────
 
