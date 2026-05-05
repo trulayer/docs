@@ -5570,8 +5570,18 @@ components:
 
     FailureCluster:
       type: object
-      required: [error_message, count, first_seen, last_seen, sample_ids]
+      required: [id, error_message, count, first_seen, last_seen, sample_ids]
       properties:
+        id:
+          type: string
+          format: uuid
+          description: |
+            Stable identifier for the cluster, deterministic per
+            (tenant_id, error_key). FailureCluster rows are computed via
+            GROUP BY rather than persisted, so this id is a UUIDv5
+            derivation — identical across requests for the same cluster.
+            Frontends should use this for cluster detail URLs rather than
+            hashing the error_message client-side.
         error_message: { type: string }
         count: { type: integer, format: int64 }
         first_seen: { type: string, format: date-time }
