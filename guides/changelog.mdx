@@ -3,6 +3,61 @@ title: Changelog
 description: Recent API and SDK changes.
 ---
 
+## 2026-05-05
+
+### Added: cursor-based pagination on `GET /v1/anomalies`
+
+`GET /v1/anomalies` now supports cursor-based pagination in addition to its existing `limit` parameter. The `offset` parameter has been replaced by `cursor`.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `cursor` | string | Opaque cursor from a previous response's `next_cursor`. Omit for the first page. |
+
+The response now includes two new fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `next_cursor` | `string \| null` | Opaque cursor to pass as `cursor` on the next request. `null` when there are no further pages. |
+| `has_more` | boolean | `true` when additional pages exist. |
+
+**How to paginate:**
+
+1. Fetch the first page with no `cursor` parameter.
+2. If `has_more` is `true`, pass the returned `next_cursor` value as `cursor` on your next request.
+3. Continue until `has_more` is `false`.
+
+```bash
+# First page
+curl "https://api.trulayer.ai/v1/anomalies?limit=50" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+
+# Subsequent pages
+curl "https://api.trulayer.ai/v1/anomalies?limit=50&cursor=<next_cursor>" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+Requires Pro+ plan and viewer+ role or an API key with `query` scope.
+
+### Added: `from` and `to` time-range params on `GET /v1/control/actions`
+
+`GET /v1/control/actions` now accepts two new optional date-range parameters to filter by when actions were created.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `from` | ISO-8601 date-time | Lower bound on `created_at` (inclusive). Optional. |
+| `to` | ISO-8601 date-time | Upper bound on `created_at` (inclusive). Optional. Must be `>= from` when both are set. |
+
+These parameters follow the same pattern as other time-filtered endpoints. Both are optional and additive — existing calls without them continue to work and return actions across the full history subject to the existing `cursor` and `limit` parameters.
+
+```bash
+curl "https://api.trulayer.ai/v1/control/actions?from=2026-05-01T00:00:00Z&to=2026-05-05T00:00:00Z" \
+  -H "Authorization: Bearer $TRULAYER_API_KEY"
+```
+
+Requires Team+ plan and viewer+ role (dashboard-only; not reachable via API key). See [Control](/dashboard/control) and the [API reference](/api-reference/introduction) for full details.
+
+---
+
 ## 2026-05-04
 
 ### Added: `GET /v1/feedback` — list feedback with cursor-based pagination
