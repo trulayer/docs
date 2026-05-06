@@ -56,6 +56,13 @@
             ]
           },
           {
+            "group": "Go SDK",
+            "pages": [
+              "sdks/go/tutorial",
+              "sdks/go/reference"
+            ]
+          },
+          {
             "group": "SDK features",
             "pages": [
               "sdks/redaction"
