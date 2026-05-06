@@ -3,17 +3,39 @@ title: "Evaluations"
 description: "Automated scoring of traces by an evaluator."
 ---
 
-An **eval** is an automated judgement of a trace. TruLayer ships with 15 built-in evaluators across four tag categories, and also supports custom evaluators — LLM-based or rule-based — that you define.
+An **eval** is an automated judgement of a trace. TruLayer ships with 25 built-in evaluators across six tag categories, and also supports custom evaluators — LLM-based or rule-based — that you define.
 
 ## Built-in catalog
 
-| Category | Evaluators |
-| -------- | ---------- |
-| `quality` | `faithfulness`, `answer_relevance`, `groundedness`, `retrieval_precision`, `retrieval_recall`, `citation_correctness`, `refusal_appropriateness` |
-| `safety` | `toxicity`, `pii_leakage`, `hallucination`, `jailbreak`, `prompt_injection`, `factual_accuracy` |
-| `format` | `function_call_correctness`, `json_schema_conformance` |
+| Name | Display name | Description | Tags |
+| ---- | ------------ | ----------- | ---- |
+| `answer_relevance` | Answer Relevance | Output directly addresses the user's question or task | `quality` |
+| `bias` | Bias Detection | Detects demographic, political, or cultural bias in outputs | `safety`, `quality` |
+| `citation_correctness` | Citation Correctness | Citations point at real sources that support the cited claim | `quality`, `retrieval` |
+| `context_utilization` | Context Utilization | Output meaningfully uses the relevant parts of provided context | `quality`, `retrieval` |
+| `cost_threshold` | Cost Threshold | Flags traces where token cost exceeds a configured limit | `cost`, `quality` |
+| `factual_accuracy` | Factual Accuracy | Verifies factual claims against widely known ground truth | `quality` |
+| `faithfulness` | Faithfulness | Output is fully supported by the provided input context | `quality`, `retrieval` |
+| `function_call_correctness` | Function Call | Correct tool chosen with valid arguments supplied | `tool-use` |
+| `groundedness` | Groundedness | Output stays within the retrieved context; no free-floating generation | `quality`, `retrieval` |
+| `hallucination` | Hallucination | Detects fabricated facts, invented citations, or unsupported claims | `quality`, `safety` |
+| `jailbreak` | Jailbreak | Model did not comply with instructions to bypass its safety policies | `safety` |
+| `json_schema_conformance` | JSON Schema | Output is valid JSON conforming to the expected schema | `tool-use` |
+| `language_conformance` | Language Match | Output is written in the language requested by the input | `quality` |
+| `latency_threshold` | Latency Threshold | Flags traces where wall-clock latency exceeds a configured limit | `performance`, `quality` |
+| `multi_turn_consistency` | Multi-Turn Consistency | Conversation stays internally consistent across turns | `quality` |
+| `output_format_compliance` | Format Compliance | Output conforms to the specified schema or structure | `tool-use`, `quality` |
+| `pii_leakage` | PII Leakage | Detects personal identifiable information in outputs | `safety` |
+| `prompt_injection` | Prompt Injection | Untrusted input did not override the system's original instructions | `safety` |
+| `prompt_injection_resistance` | Injection Resistance | Model successfully resisted embedded prompt injection attempts | `safety` |
+| `refusal_appropriateness` | Refusal Check | Refusals are calibrated — neither over-refusing nor under-refusing | `safety`, `quality` |
+| `retrieval_precision` | Retrieval Precision | Retrieved documents are relevant to the user's query | `retrieval` |
+| `retrieval_recall` | Retrieval Recall | Retrieved context contains enough information to fully answer the query | `retrieval` |
+| `sentiment_match` | Sentiment Match | Output sentiment matches the expected sentiment label | `quality` |
+| `tool_choice_correctness` | Tool Choice | Model selected the right tool for the task | `tool-use` |
+| `toxicity` | Toxicity | Detects harmful, hateful, harassing, or abusive content | `safety` |
 
-All 15 are browsable — with rubrics, defaults, and sample outputs — at [`/evals/catalog`](https://app.trulayer.ai/evals/catalog) in the dashboard.
+All 25 are browsable — with rubrics, defaults, and sample outputs — at [`/evals/catalog`](https://app.trulayer.ai/evals/catalog) in the dashboard.
 
 ## Evaluator types
 
