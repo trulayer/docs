@@ -8,8 +8,7 @@ The **Evals** page is where you configure evaluators, run them against traces or
 ## Sub-sections
 
 - **Results** — every eval result your app has triggered, newest first.
-- **Datasets** — curated trace collections used as fixed test inputs for regression.
-- **Runs** — dataset × evaluator combinations executed as a batch.
+- **Datasets** — curated trace collections used as fixed test inputs for regression. Open a dataset to see its runs and trigger new ones.
 - **Evaluators** — built-in + custom evaluators you can trigger.
 
 ## Results
@@ -50,7 +49,7 @@ Every dataset has a stable ID — reference it from CI to run regression on ever
 
 ## Runs
 
-Click **Run evaluators** on a dataset to trigger an evaluator over every trace in it. The resulting run is a row under Runs showing:
+Runs live inside each dataset's detail page — open **Datasets**, pick a dataset, and the runs panel lists every batch executed against it. Click **Run evaluators** on a dataset to trigger an evaluator over every trace in it. The resulting run is a row in that panel showing:
 
 - Dataset + evaluator + metric
 - Completion status and progress
