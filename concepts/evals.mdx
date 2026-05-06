@@ -95,6 +95,71 @@ Team and Enterprise plans support **bring-your-own-key (BYOK)**. Configure your 
 
 Rule-based evals (JSON-schema, regex, latency bounds, etc.) run entirely inside TruLayer's infrastructure at every tier — no third-party judge model, no external API call.
 
+## Eval rules
+
+An **eval rule** is a standing instruction that tells TruLayer to run a specific evaluator on every matching trace automatically. Create and manage eval rules via the dashboard **Evals → Evaluators** tab or the `POST /v1/eval-rules` API.
+
+### EvalRule fields
+
+| Field | Type | Required | Description |
+| ----- | ---- | :------: | ----------- |
+| `id` | uuid | — | Rule identifier (assigned on create) |
+| `project_id` | uuid | Yes | Project this rule applies to |
+| `metric_name` | string | Yes | Name of the evaluator to run (e.g. `correctness`, `hallucination`) |
+| `evaluator_type` | `llm` \| `rule` | Yes | Whether the evaluator is LLM-based or deterministic |
+| `config` | object | No | Evaluator-specific options (e.g. rubric, threshold) |
+| `enabled` | boolean | No | Whether the rule fires on new traces. Default: `true` |
+| `model_tier` | `cheap` \| `premium` | No | Which judge model tier to use. Default: `cheap` |
+| `min_score_drop` | number | No | Per-rule minimum score drop required to fire a `RemediationRegression` alert. See below. |
+| `created_at` | date-time | — | Timestamp of creation |
+| `updated_at` | date-time | — | Timestamp of last update |
+
+### `min_score_drop` — per-rule regression threshold
+
+`min_score_drop` controls how sensitive the `RemediationRegression` detector is for this specific eval rule.
+
+When the control loop re-evaluates a remediated trace, it compares the post-remediation score against the original score. If the score has dropped, a `RemediationRegression` failure event fires — unless the drop is smaller than `min_score_drop`, in which case the event is suppressed.
+
+| Value | Behaviour |
+| ----- | --------- |
+| `0.0` (default) | Any score decrease fires the alert |
+| `0.05` | Drops smaller than 5 points are ignored |
+| `0.10` | Drops smaller than 10 points are ignored |
+| `null` | Same as `0.0` — uses the platform default |
+
+**When to raise `min_score_drop`:** LLM-based evaluators have inherent temperature noise — the same trace can score `0.82` one run and `0.79` the next with no real quality change. A 3-point variance triggering a regression alert creates noise in the failure pipeline. Setting `min_score_drop: 0.05` to `0.10` on LLM-eval rules filters out this variance and keeps `RemediationRegression` alerts meaningful.
+
+Rule-based evaluators (`evaluator_type: rule`) are deterministic and do not exhibit temperature noise, so `min_score_drop: 0.0` (the default) is appropriate for them.
+
+**Setting the field:**
+
+```bash
+# Set on create
+curl -X POST https://api.trulayer.ai/v1/eval-rules \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "01936f...",
+    "metric_name": "correctness",
+    "evaluator_type": "llm",
+    "min_score_drop": 0.05
+  }'
+
+# Update an existing rule
+curl -X PATCH https://api.trulayer.ai/v1/eval-rules/01936f... \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"min_score_drop": 0.05}'
+
+# Clear back to platform default (alert on any drop)
+curl -X PATCH https://api.trulayer.ai/v1/eval-rules/01936f... \
+  -H "Authorization: Bearer $TRULAYER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"min_score_drop": null}'
+```
+
+Negative values are rejected with HTTP 422. The field is accepted on `POST /v1/eval-rules` (create) and `PATCH /v1/eval-rules/:id` (update), and is returned on all eval-rule responses.
+
 ## Regression testing
 
 Evals over a **dataset** (a fixed set of traces) let you detect regressions between app versions. See the [Dashboard guide](https://app.trulayer.ai/evals) for running datasets.

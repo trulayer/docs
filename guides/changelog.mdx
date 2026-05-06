@@ -5,6 +5,14 @@ description: Recent API and SDK changes.
 
 ## 2026-05-05
 
+### Added: `min_score_drop` on eval rules
+
+**Eval rules: per-rule regression threshold** — `min_score_drop` field added to eval rules. Set a per-rule minimum score drop to suppress false-positive `RemediationRegression` alerts caused by LLM-eval temperature variance. Defaults to `0.0` (existing behaviour preserved).
+
+The field is accepted on `POST /v1/eval-rules` and `PATCH /v1/eval-rules/:id`, and is returned in all eval-rule responses. See [Evaluations — eval rules](/concepts/evals#eval-rules) for the full field reference and guidance on when to use it.
+
+---
+
 ### Added: cursor-based pagination on `GET /v1/anomalies`
 
 `GET /v1/anomalies` now supports cursor-based pagination in addition to its existing `limit` parameter. The `offset` parameter has been replaced by `cursor`.
