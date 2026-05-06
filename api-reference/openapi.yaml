@@ -4493,6 +4493,17 @@ components:
           type: string
           enum: [cheap, premium]
           default: cheap
+        min_score_drop:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          description: |
+            Per-rule floor for the RemediationRegression detector (TRU-387).
+            A regression alert fires only when the post-remediation score
+            has dropped by at least this much from the original score.
+            Omitted or null means "use the platform default (0.0)" — alert
+            on any drop. Negative values are rejected.
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
@@ -4545,6 +4556,14 @@ components:
           type: string
           enum: [cheap, premium]
           default: cheap
+        min_score_drop:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          description: |
+            Optional per-rule RemediationRegression threshold (TRU-387).
+            See `EvalRule.min_score_drop` for semantics.
 
     UpdateEvalRuleRequest:
       type: object
@@ -4556,6 +4575,15 @@ components:
           type: string
           enum: [cheap, premium]
           nullable: true
+        min_score_drop:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          description: |
+            Per-rule RemediationRegression threshold (TRU-387). Omit to
+            leave the column unchanged; pass `null` to clear it back to
+            the platform default; pass a non-negative number to set it.
 
     # ── Eval Keys (BYOK) ─────────────────────────────────────────────────────────
 
