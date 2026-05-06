@@ -1,0 +1,240 @@
+---
+title: "Go SDK tutorial"
+description: "A step-by-step walkthrough from installation to a production-ready instrumented Go app."
+---
+
+This tutorial takes you from a blank Go module to a working instrumented app. Each step is self-contained — skip ahead if you already know the material.
+
+<Info>
+  All examples assume `TRULAYER_API_KEY` is set in your environment. Install the SDK with `go get github.com/trulayer/client-go`. Requires Go 1.22 or later.
+</Info>
+
+## 1. Install the SDK
+
+Add the SDK to your module:
+
+```bash
+go get github.com/trulayer/client-go
+```
+
+The SDK has zero runtime external dependencies — it uses the Go standard library only.
+
+## 2. Initialise the client
+
+Construct a `*Client` once at app startup and defer `Shutdown` so buffered traces flush before your process exits.
+
+```go
+package main
+
+import (
+    "context"
+    "os"
+
+    "github.com/trulayer/client-go/trulayer"
+)
+
+func main() {
+    ctx := context.Background()
+
+    tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
+    defer tl.Shutdown(ctx)
+
+    // your application logic here
+}
+```
+
+`Client` is safe for concurrent use. Construct it once and pass it through your application — do not construct a new client per request.
+
+## 3. Create a trace
+
+A trace represents one unit of work — for example, answering a user question. Call `NewTrace`, set the input, run your logic, set the output, then call `End`.
+
+```go
+t, ctx := tl.NewTrace(ctx, "answer-question")
+t.SetInput("What is the capital of France?")
+
+// ... your logic here ...
+
+t.SetOutput("Paris.")
+t.End(ctx)
+```
+
+`End` is non-blocking. It enqueues the trace data and returns immediately; the background batch sender handles the network call.
+
+## 4. Add spans for sub-steps
+
+Spans break a trace into individual steps. Create each span from the trace, do the work, then call `End` on the span before moving to the next step.
+
+```go
+t, ctx := tl.NewTrace(ctx, "rag-pipeline")
+t.SetInput("What is the capital of France?")
+
+// Retrieval step
+rs, rctx := t.NewSpan(ctx, "vector-retrieval", trulayer.SpanTypeRetrieval)
+docs := retrieveDocs(rctx, question)
+rs.SetOutput("retrieved 3 documents")
+rs.End(rctx)
+
+// LLM step
+ls, lctx := t.NewSpan(ctx, "llm-answer", trulayer.SpanTypeLLM,
+    trulayer.WithSpanModel("gpt-4o-mini"),
+    trulayer.WithSpanInput(question),
+)
+answer := callLLM(lctx, question, docs)
+ls.SetOutput(answer)
+ls.SetTokens(120, 8)
+ls.End(lctx)
+
+t.SetOutput(answer)
+t.End(ctx)
+```
+
+The context returned by `NewSpan` carries the span, which lets the SDK establish parent-child relationships automatically when you nest spans.
+
+## 5. Choose the right span type
+
+Use the `SpanType` constants to classify each span:
+
+| Constant | Use for |
+| -------- | ------- |
+| `trulayer.SpanTypeLLM` | Language model calls |
+| `trulayer.SpanTypeTool` | Tool or function calls |
+| `trulayer.SpanTypeRetrieval` | Vector search, document fetch |
+| `trulayer.SpanTypeOther` | Anything else |
+
+## 6. Run a complete example
+
+Below is a runnable program combining everything above. It mirrors the `basic_trace` demo in the SDK repository.
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    "os"
+
+    "github.com/trulayer/client-go/trulayer"
+)
+
+func main() {
+    ctx := context.Background()
+    apiKey := os.Getenv("TRULAYER_API_KEY")
+
+    tl := trulayer.NewClient(apiKey)
+    defer func() { _ = tl.Shutdown(ctx) }()
+
+    t, ctx := tl.NewTrace(ctx, "basic-example")
+    t.SetInput("hello")
+
+    s1, ctx := t.NewSpan(ctx, "step-1", trulayer.SpanTypeOther)
+    s1.SetOutput("step-1-done")
+    s1.End(ctx)
+
+    s2, ctx := t.NewSpan(ctx, "step-2", trulayer.SpanTypeOther)
+    s2.SetOutput("step-2-done")
+    s2.End(ctx)
+
+    t.SetOutput("world")
+    t.End(ctx)
+
+    if err := tl.Flush(ctx); err != nil {
+        log.Printf("flush: %v", err)
+    }
+    log.Printf("trace %s submitted", t.ID())
+}
+```
+
+## 7. Test offline with dry-run mode
+
+Set `TRULAYER_DRY_RUN=true` to disable all HTTP calls without changing any application code. No API key is required.
+
+```bash
+TRULAYER_DRY_RUN=true go run ./main.go
+```
+
+The SDK still constructs traces and spans normally — your code runs as usual, but nothing is sent over the network. Use this in CI and unit tests.
+
+You can also activate dry-run programmatically by passing an empty API key:
+
+```go
+tl := trulayer.NewClient("") // activates dry-run automatically
+```
+
+## 8. Attach metadata and tags
+
+Use `SetMetadata` on a trace or span to attach arbitrary key-value data visible in the dashboard. Use `SetTag` for structured string-only key-value pairs (max 20 keys, 64 characters per key and value).
+
+```go
+t, ctx := tl.NewTrace(ctx, "answer-question",
+    trulayer.WithTags(map[string]string{
+        "env":     "production",
+        "user_id": "u_42",
+    }),
+)
+
+span, ctx := t.NewSpan(ctx, "llm-call", trulayer.SpanTypeLLM)
+span.SetMetadata(map[string]interface{}{
+    "model_version": "2025-04",
+    "temperature":   0.7,
+})
+```
+
+Avoid putting PII or secrets in metadata — it is visible to all members of your team in the dashboard.
+
+## 9. Link to an upstream request ID
+
+Pass `WithTraceExternalID` to correlate the TruLayer trace with your own request ID:
+
+```go
+t, ctx := tl.NewTrace(ctx, "answer-question",
+    trulayer.WithTraceExternalID(r.Header.Get("X-Request-Id")),
+)
+```
+
+## 10. Submit feedback
+
+After ingestion you can attach user feedback to a trace. You need the trace ID, which you can capture from `t.ID()` inside your handler and return it alongside your response.
+
+```go
+err := tl.SubmitFeedback(ctx, traceID, trulayer.FeedbackData{
+    Label:   "good",
+    Comment: "Correct and concise answer.",
+})
+if err != nil {
+    log.Printf("feedback: %v", err)
+}
+```
+
+Valid `Label` values are `"good"`, `"bad"`, and `"neutral"`. You can also pass a numeric `Score` (`*float64`) and arbitrary `Metadata`.
+
+## 11. Flush before exit in short-lived scripts
+
+In short-lived command-line programs, call `Flush` explicitly after your main logic to ensure buffered traces are sent before the process exits. `Shutdown` does this automatically, but calling `Flush` mid-process lets you confirm delivery before continuing.
+
+```go
+if err := tl.Flush(ctx); err != nil {
+    log.Printf("flush: %v", err)
+}
+```
+
+For long-lived services (HTTP servers, gRPC servers), the periodic flush — every two seconds by default — handles most cases. Wire `Shutdown` into your graceful-shutdown hook to drain the queue cleanly.
+
+## 12. Cap shutdown time
+
+In production, set a deadline on `Shutdown` to avoid holding up your process exit:
+
+```go
+shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+if err := tl.Shutdown(shutdownCtx); err != nil {
+    log.Printf("shutdown: %v", err)
+}
+```
+
+## Next steps
+
+- Read the [Go SDK reference](/sdks/go/reference) for every method and option.
+- Browse the [API reference](/api-reference/introduction) for the full HTTP API surface.
+- See [traces and spans](/concepts/traces-and-spans) for conceptual background.
+- Learn how to [submit feedback](/concepts/feedback) from your production app.
