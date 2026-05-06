@@ -5,6 +5,25 @@ description: Recent API and SDK changes.
 
 ## 2026-05-05
 
+### Added: full evaluator catalog — 25 built-in evaluators
+
+The [Evaluations](/concepts/evals) page now lists all 25 shipped evaluators, up from 15. The 10 previously undocumented evaluators are:
+
+- **Bias Detection** (`bias`) — detects demographic, political, or cultural bias in outputs
+- **Context Utilization** (`context_utilization`) — output meaningfully uses the relevant parts of provided context
+- **Cost Threshold** (`cost_threshold`) — flags traces where token cost exceeds a configured limit
+- **Injection Resistance** (`prompt_injection_resistance`) — model successfully resisted embedded prompt injection attempts
+- **Language Match** (`language_conformance`) — output is written in the language requested by the input
+- **Latency Threshold** (`latency_threshold`) — flags traces where wall-clock latency exceeds a configured limit
+- **Multi-Turn Consistency** (`multi_turn_consistency`) — conversation stays internally consistent across turns
+- **Format Compliance** (`output_format_compliance`) — output conforms to the specified schema or structure
+- **Sentiment Match** (`sentiment_match`) — output sentiment matches the expected sentiment label
+- **Tool Choice** (`tool_choice_correctness`) — model selected the right tool for the task
+
+The catalog table also corrects the `format` tag to `tool-use`, which matches the tag returned by the API.
+
+---
+
 ### Added: `min_score_drop` on eval rules
 
 **Eval rules: per-rule regression threshold** — `min_score_drop` field added to eval rules. Set a per-rule minimum score drop to suppress false-positive `RemediationRegression` alerts caused by LLM-eval temperature variance. Defaults to `0.0` (existing behaviour preserved).
