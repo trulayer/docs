@@ -1,0 +1,228 @@
+---
+title: "Go SDK auto-instrumentation"
+description: "InstrumentOpenAI and InstrumentAnthropic — automatic span recording for OpenAI and Anthropic Go clients."
+---
+
+The Go SDK ships two optional auto-instrumentation sub-modules. Each wraps a provider client so every completion call becomes a TruLayer span automatically — no manual `NewSpan` / `End` calls required.
+
+The sub-modules are separate Go modules so you only pull in the provider SDK you actually use.
+
+## Install
+
+```bash
+# OpenAI auto-instrumentation
+go get github.com/trulayer/client-go/instruments/openai
+
+# Anthropic auto-instrumentation
+go get github.com/trulayer/client-go/instruments/anthropic
+```
+
+## How context-based trace-carrying works
+
+Both instruments read the active trace from the `context.Context` you pass to each call. `tl.NewTrace` stores the trace in the context it returns. You pass that context down through your call stack — including to the instrumented client — and the instrument picks up the trace automatically.
+
+```
+tl.NewTrace(ctx, "op")
+    └── returns (trace, ctx)  ← trace is stored in ctx
+         └── client.CreateChatCompletion(ctx, req)
+              └── instrument reads trace from ctx, opens a span
+```
+
+If no trace is found in the context, the instrument is a passthrough — it calls the underlying provider method unchanged and records nothing.
+
+## `InstrumentOpenAI`
+
+```go
+import (
+    "github.com/sashabaranov/go-openai"
+    instruments_openai "github.com/trulayer/client-go/instruments/openai"
+)
+
+func InstrumentOpenAI(client *openai.Client, tl *trulayer.Client) *InstrumentedOpenAIClient
+```
+
+Wraps an `*openai.Client`. The returned `*InstrumentedOpenAIClient` intercepts `CreateChatCompletion` and records each call as a `SpanTypeLLM` span on the active trace.
+
+### What is recorded automatically
+
+| Field | Source |
+| ----- | ------ |
+| `span.name` | `"openai.chat"` |
+| `span.type` | `"llm"` |
+| `span.model` | `request.Model` |
+| `span.input` | Serialised `request.Messages` |
+| `span.output` | `response.Choices[0].Message.Content` |
+| `span.prompt_tokens` | `response.Usage.PromptTokens` |
+| `span.completion_tokens` | `response.Usage.CompletionTokens` |
+| `span.error` | Error message if `CreateChatCompletion` returns a non-nil error |
+
+### Full example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+
+    openai "github.com/sashabaranov/go-openai"
+    "github.com/trulayer/client-go/trulayer"
+    instruments_openai "github.com/trulayer/client-go/instruments/openai"
+)
+
+func main() {
+    tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
+    defer tl.Shutdown(context.Background())
+
+    oai := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+    client := instruments_openai.InstrumentOpenAI(oai, tl)
+
+    ctx := context.Background()
+    trace, ctx := tl.NewTrace(ctx, "summarise-article")
+    defer trace.End(ctx)
+
+    trace.SetInput("Summarise the history of the internet.")
+
+    resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+        Model: openai.GPT4oMini,
+        Messages: []openai.ChatCompletionMessage{
+            {Role: openai.ChatMessageRoleUser, Content: "Summarise the history of the internet."},
+        },
+    })
+    if err != nil {
+        trace.SetError(err.Error())
+        return
+    }
+
+    answer := resp.Choices[0].Message.Content
+    trace.SetOutput(answer)
+    fmt.Println(answer)
+}
+```
+
+The `CreateChatCompletion` call is traced as a child span of `"summarise-article"` automatically. You do not need to open or close the span manually.
+
+## `InstrumentAnthropic`
+
+```go
+import (
+    anthropic "github.com/anthropics/anthropic-sdk-go"
+    instruments_anthropic "github.com/trulayer/client-go/instruments/anthropic"
+)
+
+func InstrumentAnthropic(client *anthropic.Client, tl *trulayer.Client) *InstrumentedAnthropicClient
+```
+
+Wraps an `*anthropic.Client`. The returned `*InstrumentedAnthropicClient` intercepts `Messages.New` and records each call as a `SpanTypeLLM` span on the active trace.
+
+### What is recorded automatically
+
+| Field | Source |
+| ----- | ------ |
+| `span.name` | `"anthropic.messages"` |
+| `span.type` | `"llm"` |
+| `span.model` | `params.Model` |
+| `span.input` | Serialised `params.Messages` |
+| `span.output` | First text block in `response.Content` |
+| `span.prompt_tokens` | `response.Usage.InputTokens` |
+| `span.completion_tokens` | `response.Usage.OutputTokens` |
+| `span.error` | Error message if `Messages.New` returns a non-nil error |
+
+### Full example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+
+    anthropic "github.com/anthropics/anthropic-sdk-go"
+    "github.com/anthropics/anthropic-sdk-go/option"
+    "github.com/trulayer/client-go/trulayer"
+    instruments_anthropic "github.com/trulayer/client-go/instruments/anthropic"
+)
+
+func main() {
+    tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
+    defer tl.Shutdown(context.Background())
+
+    ac := anthropic.NewClient(option.WithAPIKey(os.Getenv("ANTHROPIC_API_KEY")))
+    client := instruments_anthropic.InstrumentAnthropic(ac, tl)
+
+    ctx := context.Background()
+    trace, ctx := tl.NewTrace(ctx, "classify-sentiment")
+    defer trace.End(ctx)
+
+    trace.SetInput("Classify the sentiment of: 'The product is amazing!'")
+
+    msg, err := client.Messages.New(ctx, anthropic.MessageNewParams{
+        Model:     anthropic.ModelClaude4Sonnet,
+        MaxTokens: 256,
+        Messages: []anthropic.MessageParam{
+            anthropic.NewUserTextMessage("Classify the sentiment of: 'The product is amazing!'"),
+        },
+    })
+    if err != nil {
+        trace.SetError(err.Error())
+        return
+    }
+
+    answer := msg.Content[0].Text
+    trace.SetOutput(answer)
+    fmt.Println(answer)
+}
+```
+
+## Nil-trace passthrough behaviour
+
+Both instruments check for an active trace in the context before opening a span. If the context carries no trace — for example, because a code path calls the provider client outside a `NewTrace` block — the instrument calls the underlying provider method directly and returns its result unchanged. No span is recorded and no error is returned.
+
+This means you can safely instrument a shared client instance that is called from both traced and untraced code paths.
+
+## Combining auto-instrumentation with manual spans
+
+Auto-instrumented spans are children of the active trace, at the same level as any manual spans you open. You can mix both styles freely:
+
+```go
+trace, ctx := tl.NewTrace(ctx, "rag-pipeline")
+defer trace.End(ctx)
+
+// Manual retrieval span
+retrievalSpan, ctx := trace.NewSpan(ctx, "vector-search", trulayer.SpanTypeRetrieval)
+docs := vectorDB.Search(ctx, query)
+retrievalSpan.SetOutput(fmt.Sprintf("%d documents", len(docs)))
+retrievalSpan.End(ctx)
+
+// Auto-instrumented LLM span — no manual span needed
+resp, err := openaiClient.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+    Model:    openai.GPT4oMini,
+    Messages: buildMessages(query, docs),
+})
+```
+
+In the TruLayer dashboard the trace shows both spans in timeline order: your manual `"vector-search"` retrieval span followed by the auto-recorded `"openai.chat"` LLM span.
+
+## Accessing the active trace in other helpers
+
+If you need to annotate the trace from inside a helper that only receives a context, use `trulayer.TraceFromContext`:
+
+```go
+func recordUserID(ctx context.Context, userID string) {
+    if trace := trulayer.TraceFromContext(ctx); trace != nil {
+        trace.SetTag("user_id", userID)
+    }
+}
+```
+
+Similarly, use `trulayer.SpanFromContext` to access the innermost active span:
+
+```go
+func markCacheHit(ctx context.Context) {
+    if span := trulayer.SpanFromContext(ctx); span != nil {
+        span.SetMetadata(map[string]interface{}{"cache_hit": true})
+    }
+}
+```

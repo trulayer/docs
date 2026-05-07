@@ -1,9 +1,9 @@
 ---
 title: "Go SDK reference"
-description: "Every public export in the trulayer package."
+description: "Every public export in github.com/trulayer/client-go."
 ---
 
-This page documents the public surface of `github.com/trulayer/client-go`. For narrative usage, see the [tutorial](/sdks/go/tutorial).
+This page documents the public surface of `github.com/trulayer/client-go`. For narrative usage, see the [overview](/sdks/go/overview) and [tutorial](/sdks/go/tutorial). For auto-instrumentation, see [instruments](/sdks/go/instruments).
 
 <Info>
   **Status: Alpha.** APIs are pre-`1.0.0` and may change between minor releases. Pin a specific version in production until `1.0.0` ships.
@@ -13,80 +13,72 @@ This page documents the public surface of `github.com/trulayer/client-go`. For n
 
 - **Source:** [github.com/trulayer/client-go](https://github.com/trulayer/client-go)
 - **Issues / bug reports:** [github.com/trulayer/client-go/issues](https://github.com/trulayer/client-go/issues)
-- **Package:** [pkg.go.dev/github.com/trulayer/client-go](https://pkg.go.dev/github.com/trulayer/client-go)
+- **Module:** `github.com/trulayer/client-go` on [pkg.go.dev](https://pkg.go.dev/github.com/trulayer/client-go)
 
-## Installation
+## `Client`
 
-```bash
-go get github.com/trulayer/client-go
-```
+The entry point for the SDK. Construct once per process and reuse — `Client` is safe for concurrent use from multiple goroutines.
 
-Requires Go 1.22 or later. The SDK has zero runtime external dependencies — it uses the standard library only.
-
-## `NewClient`
-
-Constructs a `*Client`. Call once per process and reuse — `Client` is safe for concurrent use from multiple goroutines.
+### `NewClient`
 
 ```go
-import "github.com/trulayer/client-go/trulayer"
-
-tl := trulayer.NewClient(apiKey string, opts ...ClientOption) *Client
+func NewClient(apiKey string, opts ...ClientOption) *Client
 ```
 
-Pass an empty string for `apiKey` and set `TRULAYER_DRY_RUN=true` for offline development and testing.
-
-### `ClientOption` — functional options
-
-Pass these as variadic arguments to `NewClient`.
-
-| Option | Signature | Default | Description |
-| ------ | --------- | ------- | ----------- |
-| `WithBaseURL` | `(u string)` | `https://api.trulayer.ai` | Override the API base URL — useful for staging or self-hosted deployments. |
-| `WithBatchSize` | `(n int)` | `50` | Maximum number of traces to buffer before forcing a flush. Values ≤ 0 are ignored. |
-| `WithFlushInterval` | `(d time.Duration)` | `2s` | Periodic flush interval. Values ≤ 0 are ignored. |
-| `WithHTTPClient` | `(h *http.Client)` | stdlib default | Override the `http.Client` used for ingest and feedback submissions — useful for tests and custom transports. |
-
-Example:
-
-```go
-tl := trulayer.NewClient(
-    os.Getenv("TRULAYER_API_KEY"),
-    trulayer.WithBaseURL("https://api.trulayer.ai"),
-    trulayer.WithBatchSize(50),
-    trulayer.WithFlushInterval(2*time.Second),
-)
-```
-
-## `Client` methods
-
-### `NewTrace`
-
-Begins a new trace and returns it along with an updated context that carries the trace for child-span linkage.
-
-```go
-func (c *Client) NewTrace(ctx context.Context, name string, opts ...TraceOption) (*Trace, context.Context)
-```
-
-### `Flush`
-
-Blocks until all enqueued traces have been attempted. The context bounds how long `Flush` waits.
-
-```go
-func (c *Client) Flush(ctx context.Context) error
-```
-
-### `Shutdown`
-
-Drains the queue, performs a final flush, and stops the background goroutine. Subsequent `NewTrace` calls still succeed, but the resulting traces will not be sent. Always defer `Shutdown` at app startup.
-
-```go
-func (c *Client) Shutdown(ctx context.Context) error
-```
+Constructs a client. Pass your API key as the first argument. Call `Shutdown` when the process exits to drain the send queue.
 
 ```go
 tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
 defer tl.Shutdown(context.Background())
 ```
+
+Pass an empty string for `apiKey` and set `TRULAYER_DRY_RUN=true` for offline development or CI.
+
+#### Client options
+
+| Option | Signature | Default | Purpose |
+| ------ | --------- | ------- | ------- |
+| `WithBaseURL` | `(u string) ClientOption` | `https://api.trulayer.ai` | Override the API base URL |
+| `WithBatchSize` | `(n int) ClientOption` | `50` | Max traces buffered before a forced flush |
+| `WithFlushInterval` | `(d time.Duration) ClientOption` | `2s` | Periodic flush cadence |
+| `WithHTTPClient` | `(h *http.Client) ClientOption` | stdlib default | Override the HTTP client |
+
+### `NewTrace`
+
+```go
+func (c *Client) NewTrace(ctx context.Context, name string, opts ...TraceOption) (*Trace, context.Context)
+```
+
+Begins a new trace. Returns the `*Trace` and a child context that carries the trace — pass the child context to downstream calls so spans can link to it.
+
+```go
+trace, ctx := tl.NewTrace(ctx, "answer-question")
+defer trace.End(ctx)
+```
+
+#### Trace options
+
+| Option | Signature | Purpose |
+| ------ | --------- | ------- |
+| `WithTraceExternalID` | `(id string) TraceOption` | Attach an external identifier (e.g. a request ID) |
+| `WithTags` | `(tags map[string]string) TraceOption` | Structured key-value tags. Max 20 keys, 64 chars per key/value |
+| `WithTraceMetadata` | `(md map[string]interface{}) TraceOption` | Arbitrary metadata map |
+
+### `Flush`
+
+```go
+func (c *Client) Flush(ctx context.Context) error
+```
+
+Blocks until all enqueued traces have been attempted. The context bounds how long `Flush` waits. Use this at the end of a short-lived process (e.g. a Lambda handler) to ensure all traces ship before the runtime reclaims memory.
+
+### `Shutdown`
+
+```go
+func (c *Client) Shutdown(ctx context.Context) error
+```
+
+Drains the queue, performs a final flush, and stops the background goroutine. Subsequent `NewTrace` calls still succeed but the resulting traces will not be sent. Call at process exit — typically via `defer`.
 
 Pass a context with a deadline to cap the drain time:
 
@@ -98,231 +90,190 @@ tl.Shutdown(shutdownCtx)
 
 ### `SubmitFeedback`
 
-Posts a feedback record for a previously ingested trace. Returns a non-nil error on transport or server failure. In dry-run mode it is a no-op and returns `nil`.
-
 ```go
 func (c *Client) SubmitFeedback(ctx context.Context, traceID string, f FeedbackData) error
 ```
 
-## `Trace` API
+Posts a feedback record for a previously ingested trace. Returns a non-nil error on transport or server failure. In dry-run mode it is a no-op and returns `nil`.
 
-Create a trace via `Client.NewTrace`. All methods are safe for concurrent use.
+## `Trace`
+
+A unit of work that groups one or more spans. Create via `Client.NewTrace`.
+
+### Methods
+
+| Method | Signature | Purpose |
+| ------ | --------- | ------- |
+| `ID` | `() string` | Returns the UUIDv7 trace identifier |
+| `SetInput` | `(s string)` | Record the trace-level input (e.g. the user's prompt) |
+| `SetOutput` | `(s string)` | Record the trace-level output (e.g. the final response) |
+| `SetModel` | `(m string)` | Record the model identifier |
+| `SetError` | `(msg string)` | Mark the trace as errored; pass an empty string to clear |
+| `SetTag` | `(k, v string)` | Add a single key-value tag. Max 20 keys, 64 chars each |
+| `SetMetadata` | `(md map[string]interface{})` | Merge arbitrary metadata into the trace |
+| `NewSpan` | `(ctx context.Context, name string, spanType SpanType, opts ...SpanOption) (*Span, context.Context)` | Create a child span |
+| `End` | `(ctx context.Context)` | Finalise and queue the trace for sending. Idempotent |
 
 ### `NewSpan`
-
-Creates a new span attached to the trace. The returned context carries the span so child spans can discover their parent via context propagation.
 
 ```go
 func (t *Trace) NewSpan(ctx context.Context, name string, spanType SpanType, opts ...SpanOption) (*Span, context.Context)
 ```
 
-### `SetInput`
-
-Records the trace-level input string — for example, the original user prompt.
+Creates a new span attached to this trace. The returned context carries the span, so nested spans can find their parent automatically.
 
 ```go
-func (t *Trace) SetInput(s string)
+span, ctx := trace.NewSpan(ctx, "embed-query", trulayer.SpanTypeRetrieval)
+defer span.End(ctx)
 ```
 
-### `SetOutput`
+#### Span options
 
-Records the trace-level output string — for example, the final response returned to the user.
+| Option | Signature | Purpose |
+| ------ | --------- | ------- |
+| `WithSpanInput` | `(s string) SpanOption` | Initial input string |
+| `WithSpanModel` | `(s string) SpanOption` | Initial model identifier |
+| `WithSpanMetadata` | `(md map[string]interface{}) SpanOption` | Initial metadata map |
+
+## `Span`
+
+A unit of work inside a trace (e.g. an LLM call, a tool invocation, a retrieval step). Create via `Trace.NewSpan`.
+
+### Methods
+
+| Method | Signature | Purpose |
+| ------ | --------- | ------- |
+| `ID` | `() string` | Returns the UUIDv7 span identifier |
+| `SetInput` | `(v string)` | Record the span input (e.g. the prompt) |
+| `SetOutput` | `(v string)` | Record the span output (e.g. the completion) |
+| `SetModel` | `(m string)` | Record the model identifier |
+| `SetTokens` | `(prompt, completion int)` | Record prompt and completion token counts |
+| `SetCost` | `(usd float64)` | Record the USD cost of this span |
+| `SetError` | `(msg string)` | Mark the span as errored |
+| `SetMetadata` | `(md map[string]interface{})` | Merge arbitrary metadata into the span |
+| `End` | `(ctx context.Context)` | Finalise the span and attach it to the parent trace. Idempotent |
+
+## `SpanType`
 
 ```go
-func (t *Trace) SetOutput(s string)
+type SpanType string
+
+const (
+    SpanTypeLLM       SpanType = "llm"
+    SpanTypeTool      SpanType = "tool"
+    SpanTypeRetrieval SpanType = "retrieval"
+    SpanTypeOther     SpanType = "other"
+)
 ```
 
-### `SetModel`
+| Constant | Wire value | Description |
+| -------- | ---------- | ----------- |
+| `SpanTypeLLM` | `"llm"` | A language model call |
+| `SpanTypeTool` | `"tool"` | A tool or function call |
+| `SpanTypeRetrieval` | `"retrieval"` | A vector search or document fetch step |
+| `SpanTypeOther` | `"other"` | Any other step; use when no other type fits |
 
-Records the model identifier for the trace.
+Pass one of these constants to `Trace.NewSpan`. The TruLayer dashboard uses the span type to group and filter spans.
+
+## Context helpers
+
+### `TraceFromContext`
 
 ```go
-func (t *Trace) SetModel(m string)
+func TraceFromContext(ctx context.Context) *Trace
 ```
 
-### `SetError`
-
-Records an error message on the trace. Pass an empty string to clear a previously set error.
+Returns the active `*Trace` stored in `ctx` by `NewTrace`, or `nil` if no trace is present. Use this in middleware or auto-instrumentation code that receives a context from the caller rather than constructing a trace itself.
 
 ```go
-func (t *Trace) SetError(msg string)
+// In a handler that receives a context already carrying a trace:
+if trace := trulayer.TraceFromContext(ctx); trace != nil {
+    trace.SetTag("user_id", userID)
+}
 ```
-
-### `SetTag`
-
-Adds a single key-value tag to the trace. Limits: max 20 keys, 64 characters per key and value.
-
-```go
-func (t *Trace) SetTag(k, v string)
-```
-
-### `SetMetadata`
-
-Merges arbitrary metadata into the trace's metadata map.
-
-```go
-func (t *Trace) SetMetadata(md map[string]interface{})
-```
-
-### `End`
-
-Finalises the trace and queues it to the background batch sender. Subsequent calls to `End` are no-ops. `End` never blocks the caller on network I/O.
-
-```go
-func (t *Trace) End(ctx context.Context)
-```
-
-### `ID`
-
-Returns the UUIDv7 trace identifier. Use this to correlate with `SubmitFeedback` later in the same process.
-
-```go
-func (t *Trace) ID() string
-```
-
-### `TraceOption` — functional options
-
-Pass these as variadic arguments to `Client.NewTrace`.
-
-| Option | Signature | Description |
-| ------ | --------- | ----------- |
-| `WithTraceExternalID` | `(id string)` | Attach an external identifier to the trace — useful for correlating with upstream request IDs. |
-| `WithTags` | `(tags map[string]string)` | Attach a structured key-value tag map. Max 20 keys; keys and values are strings up to 64 characters. |
-| `WithTraceMetadata` | `(md map[string]interface{})` | Attach arbitrary metadata to the trace at creation time. |
-
-## `Span` API
-
-Create a span via `Trace.NewSpan`. All methods are safe for concurrent use.
-
-### `SetInput`
-
-Records the prompt or input string for the span.
-
-```go
-func (s *Span) SetInput(v string)
-```
-
-### `SetOutput`
-
-Records the completion or output string for the span.
-
-```go
-func (s *Span) SetOutput(v string)
-```
-
-### `SetModel`
-
-Records the model identifier for the span.
-
-```go
-func (s *Span) SetModel(m string)
-```
-
-### `SetTokens`
-
-Records prompt and completion token counts for the span.
-
-```go
-func (s *Span) SetTokens(prompt, completion int)
-```
-
-### `SetCost`
-
-Records the USD cost attributed to this span — for example, the cost of an LLM call.
-
-```go
-func (s *Span) SetCost(usd float64)
-```
-
-### `SetError`
-
-Records an error message on the span.
-
-```go
-func (s *Span) SetError(msg string)
-```
-
-### `SetMetadata`
-
-Merges arbitrary metadata into the span's metadata map.
-
-```go
-func (s *Span) SetMetadata(md map[string]interface{})
-```
-
-### `End`
-
-Finalises the span, records its end timestamp and latency, and attaches it to the parent trace. Subsequent calls to `End` are no-ops.
-
-```go
-func (s *Span) End(ctx context.Context)
-```
-
-### `ID`
-
-Returns the UUIDv7 span identifier.
-
-```go
-func (s *Span) ID() string
-```
-
-### `SpanOption` — functional options
-
-Pass these as variadic arguments to `Trace.NewSpan`.
-
-| Option | Signature | Description |
-| ------ | --------- | ----------- |
-| `WithSpanInput` | `(s string)` | Records the prompt or input string for the span at creation time. |
-| `WithSpanModel` | `(s string)` | Records the model identifier for the span at creation time. |
-| `WithSpanMetadata` | `(md map[string]interface{})` | Attaches arbitrary metadata to the span at creation time. |
 
 ### `SpanFromContext`
-
-Returns the active span carried in `ctx`, or `nil` if there is none.
 
 ```go
 func SpanFromContext(ctx context.Context) *Span
 ```
 
-## `SpanType`
-
-`SpanType` is a string enum identifying the kind of work a span represents.
-
-| Constant | Wire value | Description |
-| -------- | ---------- | ----------- |
-| `SpanTypeLLM` | `"llm"` | A language model call. |
-| `SpanTypeTool` | `"tool"` | A tool or function call. |
-| `SpanTypeRetrieval` | `"retrieval"` | A vector search or document fetch step. |
-| `SpanTypeOther` | `"other"` | Any other step. Used as the default when no type is specified. |
+Returns the active `*Span` stored in `ctx` by `NewSpan`, or `nil` if no span is present. Useful for attaching metadata inside deeply nested helpers without threading the span explicitly.
 
 ```go
-trulayer.SpanTypeLLM       // "llm"
-trulayer.SpanTypeTool      // "tool"
-trulayer.SpanTypeRetrieval // "retrieval"
-trulayer.SpanTypeOther     // "other"
-```
-
-## `FeedbackData`
-
-Wire type for feedback submissions passed to `Client.SubmitFeedback`.
-
-```go
-type FeedbackData struct {
-    TraceID  string                 // set automatically by SubmitFeedback
-    Label    string                 // "good", "bad", or "neutral"
-    Score    *float64               // optional numeric score
-    Comment  string                 // optional free-text comment
-    Metadata map[string]interface{} // optional key-value metadata
+if span := trulayer.SpanFromContext(ctx); span != nil {
+    span.SetMetadata(map[string]interface{}{"cache_hit": true})
 }
 ```
 
-Example:
+## Types
+
+### `TraceData`
+
+Wire representation of a trace. Returned when you read traces from the API; also the shape of the payload sent to the ingest endpoint.
 
 ```go
-err := tl.SubmitFeedback(ctx, trace.ID(), trulayer.FeedbackData{
-    Label:   "good",
-    Comment: "Correct and concise answer.",
-})
+type TraceData struct {
+    ID         string                 // UUIDv7
+    ExternalID string                 // optional; correlate with your own request IDs
+    Name       string
+    Input      string
+    Output     string
+    Model      string
+    LatencyMs  int64
+    Cost       float64
+    Error      string                 // empty string means no error
+    Tags       map[string]string
+    Metadata   map[string]interface{}
+    Spans      []SpanData
+}
+```
+
+### `SpanData`
+
+Wire representation of a span.
+
+```go
+type SpanData struct {
+    ID               string
+    ParentSpanID     string             // empty for root spans
+    Name             string
+    Type             SpanType           // "llm" | "tool" | "retrieval" | "other"
+    Input            string
+    Output           string
+    Model            string
+    LatencyMs        int64
+    Cost             float64
+    Error            string
+    PromptTokens     int
+    CompletionTokens int
+    Metadata         map[string]interface{}
+    StartTime        time.Time
+    EndTime          *time.Time         // nil until End() is called
+}
+```
+
+### `FeedbackData`
+
+Payload for `Client.SubmitFeedback`.
+
+```go
+type FeedbackData struct {
+    TraceID  string
+    Label    string                 // "good" | "bad" | "neutral"
+    Score    *float64               // optional 0–1 score
+    Comment  string                 // optional free-text
+    Metadata map[string]interface{}
+}
+```
+
+## Auto-instrumentation
+
+`InstrumentOpenAI` and `InstrumentAnthropic` live in optional sub-modules. See [auto-instrumentation](/sdks/go/instruments) for full documentation.
+
+```go
+import instruments_openai "github.com/trulayer/client-go/instruments/openai"
+import instruments_anthropic "github.com/trulayer/client-go/instruments/anthropic"
 ```
 
 ## Environment variables
@@ -333,10 +284,12 @@ err := tl.SubmitFeedback(ctx, trace.ID(), trulayer.FeedbackData{
 
 When dry-run mode is active, `NewTrace` and `NewSpan` still return valid objects so your code runs normally — no traces are sent over the network.
 
-## Failure behaviour
+## Error handling
 
-The SDK is designed to never block or crash your application when the TruLayer API is unavailable.
+The SDK never panics and never propagates transport or serialisation errors to your call site. Failed flushes are logged with `log.Printf` and the traces are dropped. In dry-run mode all network operations are skipped silently.
 
 - Batches that fail to send are retried up to three times with exponential backoff.
 - After retries are exhausted, the batch is dropped and a `log.Printf` warning is emitted.
 - `NewTrace` and `NewSpan` never return errors — failures are contained inside the SDK.
+
+To detect dropped traces in production, watch for `trulayer:` prefixed log lines at `ERROR` level from the SDK's logger. A future release will expose an `OnError` hook — track [github.com/trulayer/client-go/issues](https://github.com/trulayer/client-go/issues) for availability.

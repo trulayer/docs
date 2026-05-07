@@ -58,8 +58,10 @@
           {
             "group": "Go SDK",
             "pages": [
+              "sdks/go/overview",
               "sdks/go/tutorial",
-              "sdks/go/reference"
+              "sdks/go/reference",
+              "sdks/go/instruments"
             ]
           },
           {

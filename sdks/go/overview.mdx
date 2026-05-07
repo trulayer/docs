@@ -1,0 +1,78 @@
+---
+title: "Go SDK overview"
+description: "The github.com/trulayer/client-go module — install, authenticate, instrument."
+---
+
+The Go SDK (`github.com/trulayer/client-go`) is the primary way to send traces to TruLayer from Go services. It has zero external dependencies in production code, is safe for concurrent use from multiple goroutines, and ships optional auto-instrumentation sub-modules for OpenAI and Anthropic.
+
+## Requirements
+
+Go 1.22 or later.
+
+## Install
+
+```bash
+go get github.com/trulayer/client-go
+```
+
+Optional auto-instrumentation sub-modules (install only what you use):
+
+```bash
+go get github.com/trulayer/client-go/instruments/openai
+go get github.com/trulayer/client-go/instruments/anthropic
+```
+
+## Minimal usage
+
+```go
+package main
+
+import (
+    "context"
+    "os"
+
+    "github.com/trulayer/client-go/trulayer"
+)
+
+func main() {
+    tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
+    defer tl.Shutdown(context.Background())
+
+    ctx := context.Background()
+    trace, ctx := tl.NewTrace(ctx, "my-operation")
+    trace.SetInput("hello")
+
+    span, ctx := trace.NewSpan(ctx, "llm-call", trulayer.SpanTypeLLM)
+    // ... call your LLM ...
+    span.SetOutput("world")
+    span.End(ctx)
+
+    trace.SetOutput("world")
+    trace.End(ctx)
+}
+```
+
+## Zero-dependency guarantee
+
+The `github.com/trulayer/client-go` module itself uses only the Go standard library (`net/http`, `encoding/json`, `context`, `sync`). The optional instrument sub-modules under `instruments/` introduce dependencies on the respective provider SDKs, but only when you import them.
+
+## Offline / CI mode
+
+Set `TRULAYER_DRY_RUN=true` to disable all network calls. Traces are recorded in memory as normal but never shipped. Useful for unit tests and CI pipelines that run without a TruLayer API key.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="bolt" href="/quickstart">
+    Send your first trace in under five minutes.
+  </Card>
+  <Card title="Reference" icon="book" href="/sdks/go/reference">
+    Every public type and function, with signatures and examples.
+  </Card>
+  <Card title="Auto-instrumentation" icon="wand-magic-sparkles" href="/sdks/go/instruments">
+    Wrap OpenAI and Anthropic clients so every call is traced automatically.
+  </Card>
+  <Card title="Concepts" icon="diagram-project" href="/concepts/overview">
+    Understand the trace and span data model.
+  </Card>
+</CardGroup>
