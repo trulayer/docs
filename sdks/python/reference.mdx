@@ -22,15 +22,13 @@ trulayer.init(
     api_key: str,
     project_name: str,                                        # human-readable project name
     project_id: str | None = None,                           # deprecated — use project_name. Removed in 0.3.x.
-    environment: str = "production",
     endpoint: str = "https://api.trulayer.ai",
     batch_size: int = 50,
     flush_interval: float = 2.0,
-    timeout: float = 5.0,
     sample_rate: float = 1.0,
     scrub_fn: Callable[[str], str] | None = None,
     metadata_validator: Callable[[dict], None] | None = None,
-    debug: bool = False,
+    redactor: Redactor | None = None,
 ) -> TruLayerClient
 ```
 
