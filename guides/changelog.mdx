@@ -23,19 +23,18 @@ Usage:
 
 ```go
 import (
-    openai "github.com/sashabaranov/go-openai"
+    "github.com/openai/openai-go"
     "github.com/trulayer/client-go/trulayer"
     instruments_openai "github.com/trulayer/client-go/instruments/openai"
 )
 
 tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
-oai := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
-client := instruments_openai.InstrumentOpenAI(oai, tl)
+client := instruments_openai.InstrumentOpenAI(openai.NewClient(), tl)
 
-ctx, trace := tl.NewTrace(ctx, "my-op")
+trace, ctx := tl.NewTrace(ctx, "my-op")
 defer trace.End(ctx)
 
-resp, err := client.CreateChatCompletion(ctx, req) // span auto-recorded
+resp, err := client.Chat.Completions.New(ctx, req) // span auto-recorded
 ```
 
 Both instruments read the active trace from `context.Context` — pass the context
