@@ -3,6 +3,43 @@ title: Changelog
 description: Recent API and SDK changes.
 ---
 
+## 2026-05-07
+
+### Changed: `Span.error` is now always present in API responses
+
+The `error` field on span response objects is now always included in the JSON response, even when no error occurred. Previously the field was omitted when empty (`omitempty`); it now serializes as `null` when the span has no error.
+
+**Before:**
+```json
+{ "id": "span-1", "name": "generate", "type": "llm" }
+```
+
+**After:**
+```json
+{ "id": "span-1", "name": "generate", "type": "llm", "error": null }
+```
+
+The OpenAPI schema has always declared `error` as `string | null` — this change aligns the wire format to the documented schema.
+
+**Action required:** If your code checks for the *presence* of the `error` key (e.g. `"error" in span`), it will now always evaluate to `true`. Use a truthiness or null check instead:
+
+```python
+# Python — correct
+if span.get("error"):
+    handle_error(span["error"])
+```
+
+```typescript
+// TypeScript — correct
+if (span.error !== null) {
+  handleError(span.error)
+}
+```
+
+Code that already reads `span.error` with a null/falsy check is unaffected. Both SDKs expose `span.error` as `string | null` and are unaffected by this change.
+
+---
+
 ## 2026-05-05
 
 ### Added: full evaluator catalog — 25 built-in evaluators
