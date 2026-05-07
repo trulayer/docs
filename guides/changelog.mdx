@@ -5,6 +5,52 @@ description: Recent API and SDK changes.
 
 ## 2026-05-07
 
+### Added: Go SDK auto-instrumentation for OpenAI and Anthropic
+
+`InstrumentOpenAI` and `InstrumentAnthropic` are now available as optional
+sub-modules of the Go SDK. Each wraps a provider client so every completion
+call is recorded as a TruLayer span automatically — no manual `NewSpan` / `End`
+calls required.
+
+Install only the sub-modules you need:
+
+```bash
+go get github.com/trulayer/client-go/instruments/openai
+go get github.com/trulayer/client-go/instruments/anthropic
+```
+
+Usage:
+
+```go
+import (
+    openai "github.com/sashabaranov/go-openai"
+    "github.com/trulayer/client-go/trulayer"
+    instruments_openai "github.com/trulayer/client-go/instruments/openai"
+)
+
+tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
+oai := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+client := instruments_openai.InstrumentOpenAI(oai, tl)
+
+ctx, trace := tl.NewTrace(ctx, "my-op")
+defer trace.End(ctx)
+
+resp, err := client.CreateChatCompletion(ctx, req) // span auto-recorded
+```
+
+Both instruments read the active trace from `context.Context` — pass the context
+returned by `tl.NewTrace` down to the provider call and the instrument finds it
+automatically. If no trace is in the context the call passes through unchanged.
+
+Also added to the core module: `trulayer.TraceFromContext(ctx)` — retrieves the
+active `*Trace` stored in a context by `NewTrace`. Useful for annotating a trace
+from middleware or helpers that only receive a context.
+
+See the [Go SDK auto-instrumentation guide](/sdks/go/instruments) and the
+[Go SDK reference](/sdks/go/reference) for full documentation.
+
+---
+
 ### Changed: `Span.error` is now always present in API responses
 
 The `error` field on span response objects is now always included in the JSON response, even when no error occurred. Previously the field was omitted when empty (`omitempty`); it now serializes as `null` when the span has no error.
