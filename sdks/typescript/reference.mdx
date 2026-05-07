@@ -22,15 +22,12 @@ const tl = new TruLayer({
   apiKey: string,
   projectName: string,          // human-readable project name
   projectId?: string,           // @deprecated — use projectName. Removed in 0.3.x.
-  environment?: string,
   endpoint?: string,
   batchSize?: number,
   flushInterval?: number,
-  timeout?: number,
   sampleRate?: number | (() => boolean),
   redact?: (value: unknown) => unknown,
   relayUrl?: string,
-  debug?: boolean,
 });
 ```
 
@@ -91,7 +88,7 @@ await trace.span(
 | `setOutput(value)` | Span output |
 | `setMetadata(obj)` | Metadata |
 | `setModel(name)` | Model name (for `llm` spans) |
-| `setTokens({ promptTokens, completionTokens })` | Token counts |
+| `setTokens(prompt?, completion?)` | Token counts (positional numbers) |
 | `setCost(usd)` | Cost of this span in USD (number), chainable |
 | `setError(err)` | Mark errored |
 | `id` (getter) | Span UUID |
