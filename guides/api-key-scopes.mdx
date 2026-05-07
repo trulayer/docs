@@ -33,7 +33,7 @@ This means you can safely roll out scoped keys alongside existing integrations w
 
 1. Sign in to [app.trulayer.ai](https://app.trulayer.ai).
 2. Navigate to **Settings → API keys**.
-3. Click **Create key**.
+3. Click **New Key**.
 4. Give the key a descriptive name (e.g. `claude-mcp-readonly`).
 5. Under **Scopes**, select `query`.
 6. Click **Create**. Copy the displayed key — it will never be shown again.
@@ -58,9 +58,9 @@ Response:
 {
   "id": "ak_01HXYZ...",
   "name": "claude-mcp-readonly",
-  "prefix": "tl_live_4f2a",
+  "prefix": "tl_prod_4f2a",
   "scopes": ["query"],
-  "secret": "tl_live_4f2a...full-key-shown-once...",
+  "secret": "tl_prod_4f2a...full-key-shown-once...",
   "created_at": "2026-04-24T10:00:00Z"
 }
 ```
@@ -78,7 +78,7 @@ Scoped keys are ordinary bearer tokens — initialize the SDK the same way you a
 ```python Python
 from trulayer import TruLayer
 
-client = TruLayer(api_key="tl_live_4f2a...")
+client = TruLayer(api_key="tl_prod_4f2a...")
 
 # Query scope: read-only endpoints work
 traces = client.traces.list(limit=50)
@@ -91,7 +91,7 @@ runs = client.evals.list_runs()
 ```typescript TypeScript
 import { TruLayer } from '@trulayer/sdk'
 
-const client = new TruLayer({ apiKey: 'tl_live_4f2a...' })
+const client = new TruLayer({ apiKey: 'tl_prod_4f2a...' })
 
 // Query scope: read-only endpoints work
 const { traces } = await client.traces.list({ limit: 50 })
