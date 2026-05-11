@@ -5,6 +5,10 @@ description: "Find spans by meaning, not just exact match — powered by pgvecto
 
 Every span TruLayer ingests is embedded server-side and indexed in pgvector. The `/v1/search/spans` endpoint lets you find spans by semantic similarity instead of substring match — useful for root-causing a regression ("find every span that looks like this failing one"), mining eval datasets ("grab 50 traces that resemble this user complaint"), or driving MCP agents that need to reason over trace history.
 
+<Note>
+Semantic search requires a **Pro plan or above** (Pro, Team, Business, Enterprise). Calling either search endpoint on a Starter plan returns HTTP 402 with `code: "plan_upgrade_required"`.
+</Note>
+
 ## Two request shapes
 
 | Endpoint | When to use |

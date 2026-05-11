@@ -121,6 +121,8 @@ Rule-based evals (JSON-schema, regex, latency bounds, etc.) run entirely inside 
 
 An **eval rule** is a standing instruction that tells TruLayer to run a specific evaluator on every matching trace automatically. Create and manage eval rules via the dashboard **Evals → Evaluators** tab or the `POST /v1/eval-rules` API.
 
+Eval rules are available on **all plans**. Starter tenants are limited to **3 eval rules** per tenant. Attempting to create a fourth rule returns HTTP 402 with `code: "eval_rules_quota_exceeded"`. Upgrade to Pro to remove the cap.
+
 ### EvalRule fields
 
 | Field | Type | Required | Description |
