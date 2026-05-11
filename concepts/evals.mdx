@@ -101,13 +101,13 @@ LLM evals run the trace content through a **judge model**. Which model is called
 
 | Tier | Evals available | Judge model | Whose API key |
 | ---- | --------------- | ----------- | ------------- |
-| Starter | No | N/A | N/A |
-| Pro | Yes | `claude-3-5-haiku` (Anthropic) or `gpt-4o-mini` (OpenAI), chosen by the evaluator | **TruLayer's** platform key |
+| Starter | Yes (2,500 / month) | `claude-3-5-haiku` (Anthropic) or `gpt-4o-mini` (OpenAI), chosen by the evaluator | **TruLayer's** platform key |
+| Pro | Yes (50,000 / month) | `claude-3-5-haiku` (Anthropic) or `gpt-4o-mini` (OpenAI), chosen by the evaluator | **TruLayer's** platform key |
 | Team, Business, Enterprise | Yes | The judge model you configure with your BYOK credentials | **Your** API key (BYOK) |
 
-### What this means at Pro tier
+### What this means at Starter and Pro tiers
 
-When a Pro-tier org triggers an LLM eval, TruLayer sends the trace input and output to the judge model using its own Anthropic or OpenAI API key. The trace content leaves TruLayer's infrastructure on the Pro platform key's account for the duration of the judge call and is subject to the judge provider's data-processing terms.
+When a Starter- or Pro-tier org triggers an LLM eval, TruLayer sends the trace input and output to the judge model using its own Anthropic or OpenAI API key. The trace content leaves TruLayer's infrastructure on the TruLayer platform key's account for the duration of the judge call and is subject to the judge provider's data-processing terms.
 
 The dashboard surfaces this as a callout on the Evals page so the behaviour is visible before a run lands in production.
 
