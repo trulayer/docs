@@ -29,6 +29,18 @@ Current defaults (confirm against [trulayer.ai/pricing](https://trulayer.ai/pric
 | Team | 25,000,000 | 500,000 | 50 | 180 days |
 | Enterprise | Custom | Custom | Custom | Up to 400 days |
 
+### Feature availability by plan
+
+| Feature | Starter | Pro | Team | Business / Enterprise |
+| ------- | ------- | --- | ---- | --------------------- |
+| Semantic search (`/v1/search/spans`) | — | Yes | Yes | Yes |
+| Eval rules (create / update / delete) | Yes (3-rule cap) | Yes (unlimited) | Yes (unlimited) | Yes (unlimited) |
+| Anomaly detection | Yes | Yes | Yes | Yes |
+| BYOK judge model for evals | — | — | Yes | Yes |
+| Prompt deployments / control loop | — | — | Yes | Yes |
+
+Rows marked — return HTTP 402 with `code: "plan_upgrade_required"` when called on an ineligible plan. The Starter eval-rules cap returns `code: "eval_rules_quota_exceeded"` instead.
+
 ## Overage behaviour
 
 - **Starter** — hard block. Once you hit the monthly span cap, ingestion returns HTTP `429` with `error.code = "plan_limit_exceeded"` until reset or upgrade.

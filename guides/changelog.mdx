@@ -5,6 +5,22 @@ description: Recent API and SDK changes.
 
 ## 2026-05-11
 
+### Changed: Semantic search now available on Pro and above
+
+`GET /v1/search/spans` and `POST /v1/search/spans` are now accessible on **Pro, Team, Business, and Enterprise** plans. Previously the endpoints were restricted to Team and above. Starter tenants still receive `402` with `code: "plan_upgrade_required"` when calling either search endpoint.
+
+See the [Semantic search guide](/guides/semantic-search) for setup and usage.
+
+### Changed: Eval rule mutations now available on all plans, including Starter (3-rule cap)
+
+`POST /v1/eval-rules`, `PATCH /v1/eval-rules/:id`, and `DELETE /v1/eval-rules/:id` are now available on **all plans, including Starter**. Previously these endpoints required a Pro plan or above.
+
+Starter tenants are limited to **3 eval rules** per tenant. Attempting to create a fourth rule returns HTTP **402** with `code: "eval_rules_quota_exceeded"`. Upgrade to Pro to remove the cap.
+
+See the [Evaluations reference](/concepts/evals#eval-rules) and the [API reference error codes](/api-reference/introduction#machine-readable-error-codes) for details.
+
+---
+
 ### Changed: Starter and Pro plan limits updated
 
 Plan quotas and feature gating have been updated:
@@ -12,7 +28,7 @@ Plan quotas and feature gating have been updated:
 - **Starter (Free) plan** — seat cap raised from 1 to 3. Monthly eval quota raised from 1,000 to 2,500. LLM evals are now available on the Starter plan using TruLayer's platform judge model, consistent with Pro-tier behaviour.
 - **Pro plan** — monthly eval quota raised from 25,000 to 50,000.
 - **Anomaly detection** — previously gated to Pro and above; now available on all plans including Starter. The `GET /v1/anomalies` endpoint and the Anomalies toggle on the Metrics page are accessible to all tenants.
-- **Semantic search** — unchanged; still requires Team plan or above.
+- **Semantic search** — now available on Pro and above (was Team and above). See entry above.
 
 See the [usage reference](/dashboard/settings-usage) for the full plan limits table and the [evaluations reference](/concepts/evals#data-flow-for-evals) for eval tier details.
 

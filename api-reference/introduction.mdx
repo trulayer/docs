@@ -84,6 +84,7 @@ Some errors include a `code` field alongside the human-readable `error` string. 
 | `error.project.cannot_archive_last` | `409` | `POST /v1/projects/{id}/archive` | Returned when attempting to archive the tenant's last active project. At least one active project must exist at all times. |
 | `plan_upgrade_required` | `402` | Various | Feature not available on the current plan. Response also includes `required_plan`. |
 | `eval_quota_exceeded` | `402` | `POST /v1/eval` | Monthly eval quota exhausted. |
+| `eval_rules_quota_exceeded` | `402` | `POST /v1/eval-rules` | Starter tenant already has 3 eval rules, which is the plan cap. Delete an existing rule or upgrade to Pro to create more. |
 
 Always log the `request_id` — it's the fastest way for support to look up a failed request.
 
