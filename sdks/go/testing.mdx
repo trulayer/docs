@@ -1,0 +1,241 @@
+---
+title: "Testing with the Go SDK"
+description: "How to capture and assert on trace payloads in Go tests without hitting the network."
+---
+
+The Go SDK does not ship a separate testing package. Instead, tests use the standard library's `net/http/httptest` package together with `WithBaseURL` and `WithHTTPClient` to intercept every ingest and feedback POST. This gives you full access to the JSON payloads the SDK sends, with no external dependencies and no network calls.
+
+## How it works
+
+1. Start an `httptest.Server` that records incoming request bodies.
+2. Pass its URL to `trulayer.NewClient` via `WithBaseURL`.
+3. Run your instrumented code.
+4. Call `c.Flush(ctx)` or `c.Shutdown(ctx)` to drain the buffer synchronously.
+5. Assert on the recorded payloads.
+
+The integration tests in the SDK repository follow this exact pattern and are the canonical reference.
+
+## Basic example
+
+```go
+package mypackage_test
+
+import (
+    "context"
+    "encoding/json"
+    "io"
+    "net/http"
+    "net/http/httptest"
+    "sync"
+    "testing"
+    "time"
+
+    "github.com/stretchr/testify/assert"
+    "github.com/stretchr/testify/require"
+    "github.com/trulayer/client-go/trulayer"
+)
+
+func TestLLMPipelineEmitsSpans(t *testing.T) {
+    // 1. Set up a test server that captures every ingest POST.
+    var mu sync.Mutex
+    var bodies []map[string]interface{}
+
+    srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if r.URL.Path == "/v1/ingest/batch" {
+            b, _ := io.ReadAll(r.Body)
+            var payload map[string]interface{}
+            _ = json.Unmarshal(b, &payload)
+            mu.Lock()
+            bodies = append(bodies, payload)
+            mu.Unlock()
+            w.WriteHeader(201)
+            _, _ = w.Write([]byte(`{"ingested":1,"ids":["x"]}`))
+        } else {
+            w.WriteHeader(404)
+        }
+    }))
+    t.Cleanup(srv.Close)
+
+    // 2. Wire the client to the test server.
+    c := trulayer.NewClient("tl_test",
+        trulayer.WithBaseURL(srv.URL),
+        trulayer.WithFlushInterval(50*time.Millisecond),
+    )
+    t.Cleanup(func() { _ = c.Shutdown(context.Background()) })
+
+    // 3. Run your instrumented code.
+    ctx := context.Background()
+    trace, ctx := c.NewTrace(ctx, "answer-question")
+    trace.SetInput("What is the capital of France?")
+
+    span, ctx := trace.NewSpan(ctx, "llm-call", trulayer.SpanTypeLLM,
+        trulayer.WithSpanModel("gpt-4o-mini"),
+    )
+    span.SetOutput("Paris.")
+    span.SetTokens(12, 4)
+    span.End(ctx)
+
+    trace.SetOutput("Paris.")
+    trace.End(ctx)
+
+    // 4. Flush synchronously so the test server has received everything.
+    require.NoError(t, c.Flush(ctx))
+
+    // 5. Assert on the captured payload.
+    mu.Lock()
+    defer mu.Unlock()
+    require.NotEmpty(t, bodies, "expected at least one ingest call")
+
+    traces := bodies[0]["traces"].([]interface{})
+    require.Len(t, traces, 1)
+
+    got := traces[0].(map[string]interface{})
+    assert.Equal(t, "answer-question", got["name"])
+
+    spans := got["spans"].([]interface{})
+    require.Len(t, spans, 1)
+
+    s := spans[0].(map[string]interface{})
+    assert.Equal(t, "llm", s["type"])
+    assert.Equal(t, "gpt-4o-mini", s["model"])
+}
+```
+
+## Reusable recorder helper
+
+For projects with more than a few tests, extract the recorder into a shared helper:
+
+```go
+package testutil
+
+import (
+    "encoding/json"
+    "io"
+    "net/http"
+    "net/http/httptest"
+    "sync"
+    "testing"
+)
+
+// Recorder captures the JSON bodies posted to /v1/ingest/batch.
+type Recorder struct {
+    mu      sync.Mutex
+    Ingest  []map[string]interface{}
+    Feedback []map[string]interface{}
+}
+
+// NewRecorder starts an httptest.Server and registers t.Cleanup(srv.Close).
+func NewRecorder(t *testing.T) (*httptest.Server, *Recorder) {
+    t.Helper()
+    rec := &Recorder{}
+    srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        body, _ := io.ReadAll(r.Body)
+        var b map[string]interface{}
+        _ = json.Unmarshal(body, &b)
+        rec.mu.Lock()
+        switch r.URL.Path {
+        case "/v1/ingest/batch":
+            rec.Ingest = append(rec.Ingest, b)
+            w.WriteHeader(201)
+            _, _ = w.Write([]byte(`{"ingested":1,"ids":["x"]}`))
+        case "/v1/feedback":
+            rec.Feedback = append(rec.Feedback, b)
+            w.WriteHeader(200)
+            _, _ = w.Write([]byte(`{"ok":true}`))
+        default:
+            w.WriteHeader(404)
+        }
+        rec.mu.Unlock()
+    }))
+    t.Cleanup(srv.Close)
+    return srv, rec
+}
+```
+
+Use it from any test:
+
+```go
+func TestRAGPipeline(t *testing.T) {
+    srv, rec := testutil.NewRecorder(t)
+
+    c := trulayer.NewClient("tl_test", trulayer.WithBaseURL(srv.URL))
+    t.Cleanup(func() { _ = c.Shutdown(context.Background()) })
+
+    ctx := context.Background()
+    tr, ctx := c.NewTrace(ctx, "rag-pipeline")
+
+    rs, rctx := tr.NewSpan(ctx, "retrieval", trulayer.SpanTypeRetrieval)
+    rs.SetOutput("3 docs")
+    rs.End(rctx)
+
+    ls, lctx := tr.NewSpan(ctx, "llm-answer", trulayer.SpanTypeLLM)
+    ls.SetModel("gpt-4o")
+    ls.End(lctx)
+
+    tr.End(ctx)
+    require.NoError(t, c.Flush(ctx))
+
+    rec.mu.Lock()
+    defer rec.mu.Unlock()
+    require.Len(t, rec.Ingest, 1)
+    traces := rec.Ingest[0]["traces"].([]interface{})
+    spans := traces[0].(map[string]interface{})["spans"].([]interface{})
+    assert.Len(t, spans, 2)
+}
+```
+
+## Testing feedback submissions
+
+`SubmitFeedback` is synchronous, so no flush is needed before asserting:
+
+```go
+func TestFeedbackPayload(t *testing.T) {
+    srv, rec := testutil.NewRecorder(t)
+    c := trulayer.NewClient("tl_test", trulayer.WithBaseURL(srv.URL))
+    t.Cleanup(func() { _ = c.Shutdown(context.Background()) })
+
+    err := c.SubmitFeedback(context.Background(), "trace-abc", trulayer.FeedbackData{
+        Label:   "good",
+        Comment: "Correct answer.",
+    })
+    require.NoError(t, err)
+
+    require.Len(t, rec.Feedback, 1)
+    assert.Equal(t, "trace-abc", rec.Feedback[0]["trace_id"])
+    assert.Equal(t, "good", rec.Feedback[0]["label"])
+}
+```
+
+## Smoke tests with dry-run mode
+
+When you just need to verify that your instrumentation code runs without panics — and do not need to assert on payload contents — set `TRULAYER_DRY_RUN=true`. The SDK constructs all trace and span objects normally but makes no HTTP calls and emits no warnings.
+
+```bash
+TRULAYER_DRY_RUN=true go test ./...
+```
+
+Or set the environment variable in the test itself:
+
+```go
+func TestInstrumentationDoesNotPanic(t *testing.T) {
+    t.Setenv("TRULAYER_DRY_RUN", "true")
+
+    c := trulayer.NewClient("")
+    ctx := context.Background()
+
+    tr, ctx := c.NewTrace(ctx, "smoke-test")
+    span, ctx := tr.NewSpan(ctx, "step", trulayer.SpanTypeOther)
+    span.End(ctx)
+    tr.End(ctx)
+
+    _ = c.Shutdown(ctx) // returns nil in dry-run mode
+}
+```
+
+Use the `httptest.Server` approach when payload correctness matters and dry-run mode when it does not.
+
+## See also
+
+- [Failure behavior](/sdks/go/fail-mode) — drop-and-warn defaults and when `Shutdown` returns an error.
+- [Configuration](/sdks/go/configuration) — all `ClientOption` functions, including `WithBaseURL` and `WithHTTPClient`.
+- [Go SDK reference](/sdks/go/reference) — full signatures for `Client`, `Flush`, `Shutdown`, and `SubmitFeedback`.

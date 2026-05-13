@@ -60,6 +60,10 @@
             "pages": [
               "sdks/go/overview",
               "sdks/go/tutorial",
+              "sdks/go/configuration",
+              "sdks/go/examples",
+              "sdks/go/fail-mode",
+              "sdks/go/testing",
               "sdks/go/reference",
               "sdks/go/instruments"
             ]

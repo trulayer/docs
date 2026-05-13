@@ -1,0 +1,156 @@
+---
+title: "Go SDK examples"
+description: "Runnable, end-to-end Go demos that exercise the trulayer SDK against real (or mocked) providers."
+---
+
+The [`demo-go`](https://github.com/trulayer/demo-go) repository contains a curated set of standalone programs that show every public surface of the Go SDK end-to-end. Each example covers one concept — copy a pattern straight into your own service.
+
+<Note>
+  **Status: alpha.** The demo programs currently pin the SDK from a local sibling path while we cut the first public release. Standalone clones will fail to build until `github.com/trulayer/client-go` v0.1.0 is tagged. Track the release in the [demo-go repo](https://github.com/trulayer/demo-go). Once v0.1.0 ships, this notice will be removed.
+</Note>
+
+## What's in the repo
+
+- 5 runnable examples under `examples/`, one per SDK concept (manual tracing, auto-instrumentation, RAG pipeline, agent loop, feedback).
+- A local mock ingestion server in `smoke/` for offline runs.
+
+## Clone and run
+
+```bash
+git clone https://github.com/trulayer/demo-go.git
+cd demo-go
+cp .env.example .env      # add TRULAYER_API_KEY and any provider keys
+go run ./examples/basic_trace
+```
+
+To run without any network calls (no API key required):
+
+```bash
+TRULAYER_DRY_RUN=true go run ./examples/basic_trace
+```
+
+## Representative examples
+
+<CardGroup cols={2}>
+  <Card title="basic_trace" icon="code" href="https://github.com/trulayer/demo-go/tree/main/examples/basic_trace">
+    Manual `NewTrace` and `NewSpan` around a synthetic LLM call — the smallest possible end-to-end example.
+  </Card>
+  <Card title="openai_auto" icon="wand-magic-sparkles" href="https://github.com/trulayer/demo-go/tree/main/examples/openai_auto">
+    `InstrumentOpenAI` — wraps the OpenAI client so every chat completion becomes a span automatically.
+  </Card>
+  <Card title="rag_pipeline" icon="diagram-project" href="https://github.com/trulayer/demo-go/tree/main/examples/rag_pipeline">
+    Embed → retrieve → generate, captured as three typed spans (`retrieval`, `llm`) inside one trace.
+  </Card>
+  <Card title="agent" icon="robot" href="https://github.com/trulayer/demo-go/tree/main/examples/agent">
+    Tool-calling agent loop with one span per tool invocation and one per LLM turn.
+  </Card>
+  <Card title="feedback" icon="thumbs-up" href="https://github.com/trulayer/demo-go/tree/main/examples/feedback">
+    Trace an answer, then attach a `FeedbackData` record to it via `SubmitFeedback`.
+  </Card>
+</CardGroup>
+
+For the full list, see the [examples directory](https://github.com/trulayer/demo-go/tree/main/examples) on GitHub.
+
+## Basic LLM trace
+
+The pattern below manually instruments a single LLM call. Use this when auto-instrumentation is not available for your provider.
+
+```go
+package main
+
+import (
+    "context"
+    "log"
+    "os"
+
+    "github.com/trulayer/client-go/trulayer"
+)
+
+func main() {
+    ctx := context.Background()
+
+    tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
+    defer func() { _ = tl.Shutdown(ctx) }()
+
+    trace, ctx := tl.NewTrace(ctx, "answer-question")
+    trace.SetInput("What is the capital of France?")
+
+    span, ctx := trace.NewSpan(ctx, "llm-call", trulayer.SpanTypeLLM,
+        trulayer.WithSpanModel("gpt-4o-mini"),
+        trulayer.WithSpanInput("What is the capital of France?"),
+    )
+    // call your LLM here ...
+    answer := "Paris."
+    span.SetOutput(answer)
+    span.SetTokens(12, 4)
+    span.End(ctx)
+
+    trace.SetOutput(answer)
+    trace.End(ctx)
+
+    if err := tl.Flush(ctx); err != nil {
+        log.Printf("flush: %v", err)
+    }
+}
+```
+
+## Multi-span pipeline
+
+Use multiple spans to break a complex operation into observable steps.
+
+```go
+trace, ctx := tl.NewTrace(ctx, "rag-pipeline")
+trace.SetInput(userQuestion)
+
+// Step 1 — retrieval
+rs, rctx := trace.NewSpan(ctx, "vector-retrieval", trulayer.SpanTypeRetrieval)
+docs := vectorSearch(rctx, userQuestion)
+rs.SetOutput("retrieved 3 documents")
+rs.SetMetadata(map[string]interface{}{"doc_count": len(docs)})
+rs.End(rctx)
+
+// Step 2 — LLM generation
+ls, lctx := trace.NewSpan(ctx, "llm-generate", trulayer.SpanTypeLLM,
+    trulayer.WithSpanModel("gpt-4o"),
+)
+answer := callLLM(lctx, userQuestion, docs)
+ls.SetOutput(answer)
+ls.SetTokens(340, 72)
+ls.End(lctx)
+
+trace.SetOutput(answer)
+trace.End(ctx)
+```
+
+## Attaching feedback
+
+Capture the trace ID inside your handler and submit feedback later — for example, when the user clicks thumbs up.
+
+```go
+trace, ctx := tl.NewTrace(ctx, "answer-question")
+// ... run the pipeline ...
+trace.End(ctx)
+traceID := trace.ID() // save this alongside your response
+
+// Later, when you receive user feedback:
+err := tl.SubmitFeedback(ctx, traceID, trulayer.FeedbackData{
+    Label:   "good",
+    Comment: "Correct and concise.",
+})
+if err != nil {
+    log.Printf("feedback: %v", err)
+}
+```
+
+Valid `Label` values: `"good"`, `"bad"`, `"neutral"`. You can also pass a numeric `Score` (`*float64`) and arbitrary `Metadata`.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Tutorial" icon="graduation-cap" href="/sdks/go/tutorial">
+    Build the same patterns from scratch with a step-by-step walkthrough.
+  </Card>
+  <Card title="Reference" icon="book" href="/sdks/go/reference">
+    Every public export, with signatures and types.
+  </Card>
+</CardGroup>
