@@ -1,0 +1,103 @@
+---
+title: "Go SDK configuration"
+description: "Every option you can pass to trulayer.NewClient()."
+---
+
+## Options
+
+Pass `ClientOption` functions as variadic arguments to `NewClient`. All options are optional — the defaults are production-safe for most services.
+
+| Option | Type | Default | Description |
+| ------ | ---- | ------- | ----------- |
+| `WithBaseURL(u string)` | `string` | `https://api.trulayer.ai` | Override the API base URL. Use for self-hosted deployments or test mocks. |
+| `WithBatchSize(n int)` | `int` | `50` | Flush when this many traces are buffered. Values ≤ 0 are ignored. |
+| `WithFlushInterval(d time.Duration)` | `time.Duration` | `2s` | Flush after this interval, whichever comes first. Values ≤ 0 are ignored. |
+| `WithHTTPClient(h *http.Client)` | `*http.Client` | stdlib default (10 s timeout) | Override the HTTP client. Useful for custom transports, proxies, and tests. |
+
+### Environment variable — `TRULAYER_DRY_RUN`
+
+Set `TRULAYER_DRY_RUN` to `1`, `true`, or `yes` (case-insensitive) to disable all network calls. The SDK constructs traces and spans normally, but nothing is sent to the ingest API.
+
+```bash
+TRULAYER_DRY_RUN=true go run ./main.go
+```
+
+When dry-run mode is active, `SubmitFeedback` is also a no-op and returns `nil`.
+
+If you call `NewClient` with an empty API key and `TRULAYER_DRY_RUN` is **not** set, the SDK logs a warning via `log.Printf` and no traces will be sent. Always set the env var explicitly in CI and local development to silence the warning.
+
+## Example — production
+
+```go
+package main
+
+import (
+    "context"
+    "net/http"
+    "os"
+    "time"
+
+    "github.com/trulayer/client-go/trulayer"
+)
+
+func main() {
+    tl := trulayer.NewClient(
+        os.Getenv("TRULAYER_API_KEY"),
+        trulayer.WithBatchSize(100),
+        trulayer.WithFlushInterval(5*time.Second),
+        trulayer.WithHTTPClient(&http.Client{
+            Timeout: 15 * time.Second,
+        }),
+    )
+    defer func() {
+        shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+        if err := tl.Shutdown(shutdownCtx); err != nil {
+            // log or alert — buffered traces may have been lost
+        }
+    }()
+
+    // your application logic here
+}
+```
+
+## Example — local / offline
+
+For CI pipelines, local development without a TruLayer API key, or any context where you want zero network activity:
+
+```go
+// Option 1 — environment variable (no code changes required)
+// TRULAYER_DRY_RUN=true go run ./main.go
+
+// Option 2 — point at a local mock server
+tl := trulayer.NewClient(
+    "tl_local",
+    trulayer.WithBaseURL("http://localhost:4010"),
+)
+```
+
+Use `WithBaseURL` when you want to assert on the captured payloads in tests rather than silently discarding them. See [Testing](/sdks/go/testing) for the recommended `net/http/httptest` pattern.
+
+## Flush control
+
+`Flush` blocks until all enqueued traces have been attempted. Pass a context to set a deadline:
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+defer cancel()
+if err := tl.Flush(ctx); err != nil {
+    log.Printf("flush: %v", err)
+}
+```
+
+`Shutdown` performs a final flush and stops the background goroutine. In long-lived servers, wire it into your graceful-shutdown hook:
+
+```go
+shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+if err := tl.Shutdown(shutdownCtx); err != nil {
+    log.Printf("shutdown: %v", err)
+}
+```
+
+Subsequent `NewTrace` calls after `Shutdown` still succeed, but the resulting traces will not be sent.

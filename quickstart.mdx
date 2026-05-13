@@ -11,6 +11,7 @@ This guide gets you from zero to a traced LLM call visible in the dashboard in u
 - One of:
   - **Python 3.11+** for the Python SDK
   - **Node.js 18+** (or Bun, or an Edge runtime) for the TypeScript SDK
+  - **Go 1.22+** for the Go SDK
 - An LLM provider API key — this quickstart uses OpenAI
 
 ## 1. Create a project
@@ -54,6 +55,11 @@ pip install trulayer openai
 
 ```bash TypeScript
 npm install @trulayer/sdk openai
+```
+
+```bash Go
+go get github.com/trulayer/client-go
+go get github.com/trulayer/client-go/instruments/openai
 ```
 </CodeGroup>
 
@@ -105,6 +111,47 @@ const response = await tl.trace("quickstart", async (t) => {
 console.log(response.choices[0].message.content);
 
 await tl.shutdown();
+```
+
+```go Go
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	openai "github.com/sashabaranov/go-openai"
+	"github.com/trulayer/client-go/trulayer"
+	instruments_openai "github.com/trulayer/client-go/instruments/openai"
+)
+
+func main() {
+	tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
+	defer tl.Shutdown(context.Background())
+
+	oai := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+	client := instruments_openai.InstrumentOpenAI(oai, tl)
+
+	ctx := context.Background()
+	trace, ctx := tl.NewTrace(ctx, "quickstart")
+	trace.SetInput("Give me a one-sentence definition of observability.")
+
+	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
+		Model: openai.GPT4oMini,
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleUser, Content: "Give me a one-sentence definition of observability."},
+		},
+	})
+	if err != nil {
+		trace.SetError(err.Error())
+		return
+	}
+
+	answer := resp.Choices[0].Message.Content
+	trace.SetOutput(answer)
+	fmt.Println(answer)
+}
 ```
 </CodeGroup>
 

@@ -1,0 +1,81 @@
+---
+title: "Failure behavior"
+description: "What happens when the TruLayer ingest API is unreachable, and how to run without network access."
+---
+
+The Go SDK is designed so that a TruLayer ingest outage never becomes an application outage. This page documents the default behavior and the dry-run mode for teams who want zero network activity.
+
+## Default — drop and warn
+
+When the ingest API is unreachable (network error) or returns a transient status (`5xx` or `429`), the SDK:
+
+1. Retries the batch up to **3×** with exponential backoff (500 ms, 1 s, 2 s).
+2. On the third failure, drops the batch and logs a warning via `log.Printf`.
+3. Returns control to the background goroutine immediately — user code never blocks on network I/O.
+
+Non-retryable `4xx` responses (other than `429`) are dropped on the first attempt with a single `log.Printf` warning. These indicate a permanent rejection (bad API key, malformed payload) that retrying cannot fix.
+
+User code never sees a batch failure surface as an error. `Trace.End` enqueues the trace and returns immediately; the background batch sender owns all retry and discard logic.
+
+This is the right default for almost every production service. A dead ingest endpoint should degrade observability, not customer-facing behavior.
+
+## `TRULAYER_DRY_RUN=true` — zero network activity
+
+Set `TRULAYER_DRY_RUN` to `1`, `true`, or `yes` (case-insensitive) to disable all network calls entirely. The SDK constructs traces and spans as normal, but no HTTP requests are made and no warnings are emitted.
+
+```bash
+TRULAYER_DRY_RUN=true go test ./...
+```
+
+In dry-run mode:
+
+- `Flush` and `Shutdown` return `nil` immediately.
+- `SubmitFeedback` is a no-op and returns `nil`.
+- No API key is required (pass an empty string or any placeholder value).
+
+Dry-run mode is the recommended default for CI pipelines and unit tests that just need to verify your instrumentation code runs without panics.
+
+## Local mock server — full payload inspection
+
+When you need to assert on the exact payloads the SDK sends (field values, span ordering, token counts), point the client at a local `httptest.Server` instead of using dry-run mode. See [Testing](/sdks/go/testing) for the complete pattern.
+
+```go
+tl := trulayer.NewClient(
+    "tl_test",
+    trulayer.WithBaseURL(srv.URL),
+    trulayer.WithHTTPClient(srv.Client()),
+)
+```
+
+## `Shutdown` error handling
+
+`Shutdown(ctx)` returns an error only when the context is cancelled or times out before the final flush completes. A non-nil error from `Shutdown` means some buffered traces may not have been sent.
+
+In production, always set a deadline and log the error:
+
+```go
+shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+if err := tl.Shutdown(shutdownCtx); err != nil {
+    log.Printf("trulayer shutdown: %v — some traces may have been lost", err)
+}
+```
+
+`Shutdown` does **not** return an error when the ingest API rejects or drops a batch. Batch failures are logged, not propagated. If you need programmatic detection of flush failures, use a custom `WithHTTPClient` with a transport that records responses.
+
+## Decision guide
+
+| Scenario | Recommended approach |
+| --- | --- |
+| Production HTTP server | Default (drop + warn) |
+| Background worker with SLO on ingest | Default (drop + warn); monitor `log.Printf` output |
+| CI unit tests — verify no panics | `TRULAYER_DRY_RUN=true` |
+| CI integration tests — assert on payloads | `httptest.Server` + `WithBaseURL` |
+| Local development without an API key | `TRULAYER_DRY_RUN=true` |
+| Tests with custom transport or proxy | `WithHTTPClient` |
+
+## See also
+
+- [Testing](/sdks/go/testing) — `httptest.Server` pattern for asserting on captured payloads.
+- [Configuration](/sdks/go/configuration) — all `ClientOption` functions and the `TRULAYER_DRY_RUN` env var.
+- [Go SDK reference](/sdks/go/reference) — full signatures for `Client`, `Flush`, and `Shutdown`.
