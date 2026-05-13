@@ -3664,6 +3664,14 @@ components:
             `token_count_min` / `token_count_max` on `GET /v1/traces`.
           type: integer
           nullable: true
+        prompt_tokens_total:
+          description: Sum of prompt tokens across every span on the trace, computed at ingest time.
+          type: integer
+          nullable: true
+        completion_tokens_total:
+          description: Sum of completion tokens across every span on the trace, computed at ingest time.
+          type: integer
+          nullable: true
         error: { type: string, nullable: true }
         tags: { type: array, items: { type: string } }
         tag_map:
