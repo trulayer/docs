@@ -366,48 +366,43 @@ paths:
     get:
       operationId: exportTraces
       tags: [traces, export]
-      summary: Stream traces as CSV or JSONL (sync export)
+      summary: Stream the spans of a single trace as CSV or JSONL (sync export)
       description: |
-        Cursor-streamed synchronous export of traces matching the same
-        filters as `GET /v1/traces`. Rows are written directly to the
-        response body — never buffered — and capped per plan
-        (Starter: 100, Pro/Team/Business: 5000, Enterprise: unlimited).
-        Hitting the cap sets `X-TruLayer-Truncated: true`; the payload is
-        complete up to that row.
+        Cursor-streamed synchronous export of every span belonging to the
+        trace identified by `trace_id`. `trace_id` is **required** — the
+        batch "all traces" export path was removed because it was too
+        expensive to support at hypertable scale. Callers needing trace-
+        level analytics should use `GET /v1/traces` for paginated listing
+        and call this endpoint per trace.
 
-        CSV columns (in order): `id, project_name, model, environment,
-        status, duration_ms, token_count, cost_usd, created_at`.
+        Rows are written directly to the response body — never buffered —
+        and capped per plan (Starter: 100, Pro/Team/Business: 5000,
+        Enterprise: unlimited). Hitting the cap sets
+        `X-TruLayer-Truncated: true`; the payload is complete up to that row.
+
+        CSV columns (in order): `id, trace_id, name, type, model,
+        duration_ms, prompt_tokens, completion_tokens, cost_usd,
+        span_output, trace_output, error, created_at`. `span_output` is
+        the span's own output payload; `trace_output` is the parent
+        trace's output payload joined onto every span row so a single
+        download carries both.
 
         JSONL emits one JSON object per line with the same keys.
 
-        Pass `trace_id` to switch to per-trace span export — the response
-        body becomes one row per span of the supplied trace with columns
-        `id, trace_id, name, type, model, duration_ms, prompt_tokens,
-        completion_tokens, cost_usd, error, created_at` and the
-        Content-Disposition filename becomes `spans-<trace-prefix>-YYYY-MM-DD.{csv,jsonl}`.
+        The Content-Disposition filename is
+        `spans-<trace-prefix>-YYYY-MM-DD.{csv,jsonl}`.
       parameters:
+        - name: trace_id
+          in: query
+          required: true
+          description: Trace to export spans for. Required — the endpoint returns 400 if absent.
+          schema: { type: string, format: uuid }
         - name: format
           in: query
           schema: { type: string, enum: [csv, jsonl], default: csv }
         - name: project_id
           in: query
           schema: { type: string, format: uuid }
-        - name: trace_id
-          in: query
-          description: When set, exports the spans of the given trace instead of the trace list.
-          schema: { type: string, format: uuid }
-        - name: model
-          in: query
-          schema: { type: string }
-        - name: error
-          in: query
-          schema: { type: boolean }
-        - name: from
-          in: query
-          schema: { type: string, format: date-time }
-        - name: to
-          in: query
-          schema: { type: string, format: date-time }
       responses:
         "200":
           description: Streamed CSV or JSONL payload.
@@ -416,7 +411,7 @@ paths:
               description: Present and `true` when the per-plan row cap was hit and more rows exist.
               schema: { type: boolean }
             Content-Disposition:
-              description: Suggests a filename of `traces-YYYY-MM-DD.{csv,jsonl}` (or `spans-<trace-prefix>-YYYY-MM-DD.{csv,jsonl}` when `trace_id` is supplied).
+              description: Suggests a filename of `spans-<trace-prefix>-YYYY-MM-DD.{csv,jsonl}`.
               schema: { type: string }
           content:
             text/csv:
