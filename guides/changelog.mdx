@@ -3,6 +3,40 @@ title: Changelog
 description: Recent API and SDK changes.
 ---
 
+## 2026-05-13
+
+### Changed: `GET /v1/traces/export` column schema updated
+
+The CSV and JSONL column contract for `GET /v1/traces/export` has changed. If you parse the export output by column position or key name, update your code.
+
+**New column order (CSV and JSONL keys):**
+
+| Column | Notes |
+|--------|-------|
+| `trace_id` | unchanged |
+| `span_id` | **renamed** from `id` |
+| `name` | unchanged |
+| `type` | unchanged |
+| `model` | unchanged |
+| `created_at` | **moved** — was last, now position 6 |
+| `duration_ms` | unchanged |
+| `prompt_tokens` | unchanged |
+| `completion_tokens` | unchanged |
+| `cost_usd` | unchanged |
+| `trace_input` | **new** — parent trace's input text |
+| `trace_output` | unchanged |
+| `span_input` | **new** — span's own input text |
+| `span_output` | unchanged |
+| `error` | unchanged |
+
+**Migration notes:**
+- The `id` column is now `span_id`. Update any column-name lookups.
+- `created_at` has moved from the last position to position 6. Update any positional (index-based) CSV parsers.
+- Two new columns (`trace_input`, `span_input`) have been inserted. Positional parsers must account for the shift.
+- JSONL consumers keyed by field name only need to handle the two new keys and the `id` → `span_id` rename.
+
+---
+
 ## 2026-05-11
 
 ### Changed: Semantic search now available on Pro and above
