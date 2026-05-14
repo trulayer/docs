@@ -380,12 +380,15 @@ paths:
         Enterprise: unlimited). Hitting the cap sets
         `X-TruLayer-Truncated: true`; the payload is complete up to that row.
 
-        CSV columns (in order): `id, trace_id, name, type, model,
-        duration_ms, prompt_tokens, completion_tokens, cost_usd,
-        span_output, trace_output, error, created_at`. `span_output` is
-        the span's own output payload; `trace_output` is the parent
-        trace's output payload joined onto every span row so a single
-        download carries both.
+        CSV columns (in order): `trace_id, span_id, name, type, model,
+        created_at, duration_ms, prompt_tokens, completion_tokens, cost_usd,
+        trace_input, trace_output, span_input, span_output, error`.
+        `span_id` is the unique identifier for the span (renamed from `id`).
+        `trace_input` is the parent trace's input text joined onto every span
+        row. `span_input` is the span's own input text. `trace_output` and
+        `span_output` are the parent trace's and span's output payloads
+        respectively, so a single download carries the full input/output
+        context for both the trace and each span.
 
         JSONL emits one JSON object per line with the same keys.
 
