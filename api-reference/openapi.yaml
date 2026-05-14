@@ -375,16 +375,26 @@ paths:
         Hitting the cap sets `X-TruLayer-Truncated: true`; the payload is
         complete up to that row.
 
-        CSV columns (in order): `id, project_id, model, environment,
+        CSV columns (in order): `id, project_name, model, environment,
         status, duration_ms, token_count, cost_usd, created_at`.
 
         JSONL emits one JSON object per line with the same keys.
+
+        Pass `trace_id` to switch to per-trace span export — the response
+        body becomes one row per span of the supplied trace with columns
+        `id, trace_id, name, type, model, duration_ms, prompt_tokens,
+        completion_tokens, cost_usd, error, created_at` and the
+        Content-Disposition filename becomes `spans-<trace-prefix>-YYYY-MM-DD.{csv,jsonl}`.
       parameters:
         - name: format
           in: query
           schema: { type: string, enum: [csv, jsonl], default: csv }
         - name: project_id
           in: query
+          schema: { type: string, format: uuid }
+        - name: trace_id
+          in: query
+          description: When set, exports the spans of the given trace instead of the trace list.
           schema: { type: string, format: uuid }
         - name: model
           in: query
@@ -406,7 +416,7 @@ paths:
               description: Present and `true` when the per-plan row cap was hit and more rows exist.
               schema: { type: boolean }
             Content-Disposition:
-              description: Suggests a filename of `traces-YYYY-MM-DD.{csv,jsonl}`.
+              description: Suggests a filename of `traces-YYYY-MM-DD.{csv,jsonl}` (or `spans-<trace-prefix>-YYYY-MM-DD.{csv,jsonl}` when `trace_id` is supplied).
               schema: { type: string }
           content:
             text/csv:
