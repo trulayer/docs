@@ -24,7 +24,7 @@ Both instruments read the active trace from the `context.Context` you pass to ea
 ```
 tl.NewTrace(ctx, "op")
     └── returns (trace, ctx)  ← trace is stored in ctx
-         └── client.CreateChatCompletion(ctx, req)
+         └── client.Chat.Completions.New(ctx, req)
               └── instrument reads trace from ctx, opens a span
 ```
 
@@ -34,27 +34,27 @@ If no trace is found in the context, the instrument is a passthrough — it call
 
 ```go
 import (
-    "github.com/sashabaranov/go-openai"
+    "github.com/openai/openai-go"
     instruments_openai "github.com/trulayer/client-go/instruments/openai"
 )
 
 func InstrumentOpenAI(client *openai.Client, tl *trulayer.Client) *InstrumentedOpenAIClient
 ```
 
-Wraps an `*openai.Client`. The returned `*InstrumentedOpenAIClient` intercepts `CreateChatCompletion` and records each call as a `SpanTypeLLM` span on the active trace.
+Wraps an `*openai.Client`. The returned `*InstrumentedOpenAIClient` intercepts `Chat.Completions.New` and records each call as a `SpanTypeLLM` span on the active trace.
 
 ### What is recorded automatically
 
 | Field | Source |
 | ----- | ------ |
-| `span.name` | `"openai.chat"` |
+| `span.name` | `"openai.chat.completions"` |
 | `span.type` | `"llm"` |
-| `span.model` | `request.Model` |
-| `span.input` | Serialised `request.Messages` |
+| `span.model` | `params.Model` |
+| `span.input` | Last user message from `params.Messages` |
 | `span.output` | `response.Choices[0].Message.Content` |
 | `span.prompt_tokens` | `response.Usage.PromptTokens` |
 | `span.completion_tokens` | `response.Usage.CompletionTokens` |
-| `span.error` | Error message if `CreateChatCompletion` returns a non-nil error |
+| `span.error` | Error message if `Chat.Completions.New` returns a non-nil error |
 
 ### Full example
 
@@ -66,7 +66,7 @@ import (
     "fmt"
     "os"
 
-    openai "github.com/sashabaranov/go-openai"
+    "github.com/openai/openai-go"
     "github.com/trulayer/client-go/trulayer"
     instruments_openai "github.com/trulayer/client-go/instruments/openai"
 )
@@ -75,8 +75,8 @@ func main() {
     tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
     defer tl.Shutdown(context.Background())
 
-    oai := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
-    client := instruments_openai.InstrumentOpenAI(oai, tl)
+    oai := openai.NewClient()
+    client := instruments_openai.InstrumentOpenAI(&oai, tl)
 
     ctx := context.Background()
     trace, ctx := tl.NewTrace(ctx, "summarise-article")
@@ -84,10 +84,10 @@ func main() {
 
     trace.SetInput("Summarise the history of the internet.")
 
-    resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-        Model: openai.GPT4oMini,
-        Messages: []openai.ChatCompletionMessage{
-            {Role: openai.ChatMessageRoleUser, Content: "Summarise the history of the internet."},
+    resp, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+        Model: openai.ChatModelGPT4oMini,
+        Messages: []openai.ChatCompletionMessageParamUnion{
+            openai.UserMessage("Summarise the history of the internet."),
         },
     })
     if err != nil {
@@ -101,7 +101,7 @@ func main() {
 }
 ```
 
-The `CreateChatCompletion` call is traced as a child span of `"summarise-article"` automatically. You do not need to open or close the span manually.
+The `Chat.Completions.New` call is traced as a child span of `"summarise-article"` automatically. You do not need to open or close the span manually.
 
 ## `InstrumentAnthropic`
 
@@ -197,8 +197,8 @@ retrievalSpan.SetOutput(fmt.Sprintf("%d documents", len(docs)))
 retrievalSpan.End(ctx)
 
 // Auto-instrumented LLM span — no manual span needed
-resp, err := openaiClient.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-    Model:    openai.GPT4oMini,
+resp, err := openaiClient.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+    Model:    openai.ChatModelGPT4oMini,
     Messages: buildMessages(query, docs),
 })
 ```
