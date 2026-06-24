@@ -121,7 +121,7 @@ import (
 	"fmt"
 	"os"
 
-	openai "github.com/sashabaranov/go-openai"
+	"github.com/openai/openai-go"
 	"github.com/trulayer/client-go/trulayer"
 	instruments_openai "github.com/trulayer/client-go/instruments/openai"
 )
@@ -130,17 +130,17 @@ func main() {
 	tl := trulayer.NewClient(os.Getenv("TRULAYER_API_KEY"))
 	defer tl.Shutdown(context.Background())
 
-	oai := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
-	client := instruments_openai.InstrumentOpenAI(oai, tl)
+	oai := openai.NewClient()
+	client := instruments_openai.InstrumentOpenAI(&oai, tl)
 
 	ctx := context.Background()
 	trace, ctx := tl.NewTrace(ctx, "quickstart")
 	trace.SetInput("Give me a one-sentence definition of observability.")
 
-	resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-		Model: openai.GPT4oMini,
-		Messages: []openai.ChatCompletionMessage{
-			{Role: openai.ChatMessageRoleUser, Content: "Give me a one-sentence definition of observability."},
+	resp, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+		Model: openai.ChatModelGPT4oMini,
+		Messages: []openai.ChatCompletionMessageParamUnion{
+			openai.UserMessage("Give me a one-sentence definition of observability."),
 		},
 	})
 	if err != nil {
