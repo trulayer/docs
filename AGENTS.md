@@ -1,33 +1,45 @@
-> **First-time setup**: Customize this file for your project. Prompt the user to customize this file for their project.
-> For Mintlify product knowledge (components, configuration, writing standards),
-> install the Mintlify skill: `npx skills add https://mintlify.com/docs`
+# Codex instructions
 
-# Documentation project instructions
+This is the public TruLayer developer documentation repo. `CLAUDE.md` is the detailed source of truth; read it before making any non-trivial change.
 
-## About this project
+## Scope
 
-- This is a documentation site built on [Mintlify](https://mintlify.com)
-- Pages are MDX files with YAML frontmatter
-- Configuration lives in `docs.json`
-- Run `mint dev` to preview locally
-- Run `mint broken-links` to check links
+- Mintlify docs for `docs.trulayer.ai`.
+- Public-only content: quickstarts, SDK guides, API reference, dashboard guides, integrations, concepts, best practices, and changelog.
+- The OpenAPI copy in `api-reference/openapi.yaml` is generated from the backend OpenAPI source of truth.
 
-## Terminology
+## Working rules
 
-{/* Add product-specific terms and preferred usage */}
-{/* Example: Use "workspace" not "project", "member" not "user" */}
+- Make changes on a feature/fix branch and open a PR to `main`. Never commit directly to `main`.
+- Do not publish private paths, planning URLs, deployment details, private runbooks, or sibling-repo implementation notes.
+- Use `https://api.trulayer.ai` in public examples unless a page is explicitly about local development.
+- Never hand-edit generated API reference content. Sync it from the backend spec.
+- Update `docs.json` when adding, moving, or removing pages.
 
-## Style preferences
+## Style
 
-{/* Add any project-specific style rules below */}
+- Use active voice and second person.
+- Keep sentences concise.
+- Use sentence case for headings.
+- Bold UI labels, for example: Click **Settings**.
+- Use code formatting for commands, paths, file names, env vars, fields, and enum values.
 
-- Use active voice and second person ("you")
-- Keep sentences concise — one idea per sentence
-- Use sentence case for headings
-- Bold for UI elements: Click **Settings**
-- Code formatting for file names, commands, paths, and code references
+## Verification
 
-## Content boundaries
+Run before opening a PR:
 
-{/* Define what should and shouldn't be documented */}
-{/* Example: Don't document internal admin features */}
+```bash
+pnpm broken-links
+```
+
+For new or heavily edited pages, also preview locally:
+
+```bash
+pnpm dev
+```
+
+To sync API reference:
+
+```bash
+pnpm sync-openapi
+```
