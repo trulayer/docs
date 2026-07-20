@@ -8,6 +8,11 @@
     "dark": "#4F46E5"
   },
   "favicon": "/favicon.svg",
+  "seo": {
+    "metatags": {
+      "canonical": "https://docs.trulayer.ai"
+    }
+  },
   "navigation": {
     "tabs": [
       {
